@@ -120,7 +120,7 @@ Priority: **M** = Must, **S** = Should, **C** = Could.
 | ID | Requirement | P |
 |---|---|---|
 | FR-C1 | Upload several CVs at once (.pdf, .docx, .txt), or **Use sample CVs** to load the 6 files in `data/sample/cvs/` | M |
-| FR-C2 | Each CV is converted to text on upload. Unreadable or almost-empty files show a clear message ("No text found. Is this a scanned image?") and are left out | M |
+| FR-C2 | Each CV is converted to text on upload. Unreadable or almost-empty files (fewer than 50 words) show a clear message ("No text found. Is this a scanned image?") and are left out | M |
 | FR-C3 | Intake guardrails run on upload: protected details are redacted and lines that look like instructions to the AI are quarantined (section 8). Each CV shows badges: word count, "N details redacted", "⚠ Suspicious text removed" | M |
 | FR-C4 | A preview shows the cleaned text exactly as the AI will see it | S |
 | FR-C5 | A CV can be removed before screening. A file with the same name and content as an existing one is ignored | M |
@@ -501,7 +501,7 @@ RunResult:          run_id: str, created_at: str, provider: str, model: str,
 
 Lines or segments with a label followed by a value are redacted to `Label: [REDACTED]`. The labels are: date of birth / DOB / born, age, gender / sex, marital status, children / dependants, religion, nationality, ethnicity / race, health, disability, photo.
 
-- The redaction list is shown to the recruiter.
+- The redaction list is shown to the recruiter as **labels only** (e.g. "Date of birth"). The removed values are never stored or shown.
 - Flag: `protected_info_redacted` (info).
 - Test: Jean-Marc's "14/03/1979", "Married, two children" and "Nationality: Mauritian" must not appear in any prompt sent to the model.
 
@@ -578,6 +578,8 @@ band:     overall ≥ 75        → Strong match
 - Nice-to-haves: 4 met, 1 partial and 2 missing, so nice% = 4.5 / 7 = 64.3%
 - Overall = 0.7 × 92.9 + 0.3 × 64.3 = 65.0 + 19.3 = **84.3**, a **Strong match**
 
+**No nice-to-haves:** if a job has no nice-to-have requirements, overall = 100 × must%, so a perfect candidate can still reach 100.
+
 **Must-have gaps** are the must-haves marked missing. They're shown on the card.
 
 The rubric numbers live in `core/scoring.py` as named constants, with a comment pointing to Guidelines §4.
@@ -609,6 +611,7 @@ Scoring is a pure function: the same statuses always give the same score. Re-run
 |---|---|---|
 | `preferences` | id, text, created_at | Recruiter preferences (memory) |
 | `jobs` | id, title, jd_text, requirements_json, approved_by, approved_at | Approved requirements, kept per job (memory) |
+| `documents` | id, kind, file_name, content_hash, clean_text, word_count, redactions_json, quarantined_json, active, created_at | Loaded CVs after intake, so they survive a restart. Only the **cleaned** (redacted) text is stored. `active` = in the current working area; **New screening** sets it to false |
 | `runs` | id, job_id, created_at, provider, model, payload_json | Full `RunResult` (state; resume after restart) |
 | `decisions` | run_id, candidate_id, candidate_name, decision, reason, reviewer, ai_band, ai_score, decided_at (primary key run_id + candidate_id) | Human decisions |
 | `reports` | run_id, draft_md, final_md, approved_by, approved_at | Shortlist report and approval |
