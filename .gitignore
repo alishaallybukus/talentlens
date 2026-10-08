@@ -1,0 +1,14 @@
+# Secrets: never commit these
+.env
+.streamlit/secrets.toml
+
+# Virtual environment
+.venv/
+
+# Local data: the database and any cache files
+data/cache/
+data/*.db
+
+# Python and pytest leftovers
+__pycache__/
+.pytest_cache/

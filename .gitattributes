@@ -1,0 +1,8 @@
+# Tell git which files are binary, so it never changes their bytes.
+# Without this, git can mistake the sample PDFs for text and corrupt them
+# by changing their line endings.
+*.pdf binary
+*.docx binary
+*.xlsx binary
+*.png binary
+*.db binary

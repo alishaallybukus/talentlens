@@ -1,0 +1,12 @@
+# TalentLens dependencies, pinned to the exact versions we tested with.
+# Install with:  pip install -r requirements.txt
+streamlit==1.65.0
+pydantic==2.13.5
+requests==2.34.2
+python-dotenv==1.2.4
+pypdf==6.19.0
+python-docx==1.2.0
+SQLAlchemy==2.1.4
+pytest==9.1.1
+# Only used by scripts/generate_sample_data.py
+reportlab==5.0.1
