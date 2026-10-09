@@ -110,3 +110,112 @@ def test_preference_can_be_saved(app) -> None:
     assert app.text_input(key="new_preference").value == ""
     page_text = " ".join(block.value for block in app.markdown)
     assert "TikTok experience matters a lot" in page_text
+
+
+def screened_app(tmp_path, monkeypatch) -> AppTest:
+    """An app that has gone through Phase 3: requirements approved, sample CVs screened (fake model)."""
+    from tests.fake_llm import FakeLLM
+
+    monkeypatch.setenv("DATABASE_URL", "sqlite:///" + (tmp_path / "review.db").as_posix())
+    monkeypatch.setattr("ui.state.make_llm", lambda settings, memory: FakeLLM())
+    test_app = AppTest.from_file(APP_FILE, default_timeout=APP_TIMEOUT)
+    test_app.run()
+    click(test_app, "Load the sample job (Marketing Executive)")
+    click(test_app, "Extract requirements")
+    click(test_app, "Approve requirements")
+    go_to(test_app, "candidates")
+    click(test_app, "Use sample CVs")
+    go_to(test_app, "screening")
+    click(test_app, "Run screening")
+    return test_app
+
+
+def candidate_id(test_app: AppTest, first_name: str) -> str:
+    run = test_app.session_state["run"]
+    return next(c.candidate_id for c in run.candidates if c.profile.name.startswith(first_name))
+
+
+def decide(test_app: AppTest, first_name: str, decision: str, reason: str = "") -> None:
+    """Open a candidate on the Review page and save a decision."""
+    cid = candidate_id(test_app, first_name)
+    test_app.selectbox(key="selected_candidate").set_value(cid).run()
+    test_app.radio(key=f"decision_{cid}").set_value(decision).run()
+    test_app.text_area(key=f"reason_{cid}").input(reason).run()
+    test_app.button(key=f"save_{cid}").click().run()
+
+
+def test_full_phase_4_journey_with_fake_model(tmp_path, monkeypatch) -> None:
+    """Review → decisions (a rejection without a reason is blocked) → report → approve → download."""
+    app = screened_app(tmp_path, monkeypatch)
+    go_to(app, "review")
+    assert no_errors(app)
+    assert "AI recommendation, not a decision" in all_text(app)
+
+    # A rejection without a reason is blocked (FR-D2, AC8).
+    decide(app, "Ryan", "Reject", "")
+    assert any("job-related reason" in error.value for error in app.error)
+    from core.memory import Memory
+
+    memory = Memory("sqlite:///" + (tmp_path / "review.db").as_posix())
+    run_id = app.session_state["run"].run_id
+    assert memory.get_decisions(run_id) == {}
+
+    decide(app, "Ryan", "Reject", "No digital marketing experience")
+    decide(app, "Sarah", "Shortlist", "Great portfolio")
+    decide(app, "Kevin", "Shortlist")
+    decide(app, "Aisha", "Hold", "Check references")
+    assert no_errors(app)
+    decisions = memory.get_decisions(run_id)
+    assert {row["decision"] for row in decisions.values()} == {"Reject", "Shortlist", "Hold"}
+
+    # Shortlist report: only shortlisted candidates (FR-P5).
+    go_to(app, "report")
+    assert no_errors(app)
+    assert not app.get("download_button")  # no downloads before approval
+    click(app, "Draft report")
+    assert no_errors(app)
+    draft = app.text_area(key="report_editor").value
+    assert "## Sarah" in draft and "## Kevin" in draft
+    assert "Ryan" not in draft and "Aisha" not in draft
+    click(app, "Approve report")
+    assert no_errors(app)
+    assert "Approved by Recruiter" in all_text(app)
+    assert memory.get_report(run_id)["approved_by"] == "Recruiter"
+    assert len(app.get("download_button")) == 2
+
+    # Behind the scenes shows the audit of those actions.
+    go_to(app, "behind")
+    assert no_errors(app)
+    memory.close()
+
+
+def test_screen_new_cvs_adds_nadia_to_the_ranking(tmp_path, monkeypatch) -> None:
+    from core.documents import content_hash, read_document_file
+    from core.guardrails import run_intake
+    from core.memory import Memory
+    from tests.conftest import LIVE_DEMO_DIR
+
+    app = screened_app(tmp_path, monkeypatch)
+    nadia_path = sorted(LIVE_DEMO_DIR.iterdir())[0]
+    memory = Memory("sqlite:///" + (tmp_path / "review.db").as_posix())
+    intake = run_intake(nadia_path.name, read_document_file(nadia_path), content_hash(nadia_path.read_bytes()))
+    memory.add_document(intake, kind="cv")  # the same as uploading her CV on page 2
+    memory.close()
+
+    click(app, "Screen new CVs")
+    assert no_errors(app)
+    names = [c.profile.name for c in app.session_state["run"].candidates]
+    assert len(names) == 7 and any(name.startswith("Nadia") for name in names)
+    go_to(app, "review")
+    assert no_errors(app)
+    assert "Nadia" in all_text(app)
+
+
+def test_reset_decisions_needs_confirmation(tmp_path, monkeypatch) -> None:
+    app = screened_app(tmp_path, monkeypatch)
+    go_to(app, "review")
+    decide(app, "Sarah", "Shortlist")
+    click(app, "Reset decisions")
+    click(app, "Yes, reset")
+    assert no_errors(app)
+    assert "0 of 6 candidates decided" in all_text(app) or "Decision: Pending" in all_text(app)

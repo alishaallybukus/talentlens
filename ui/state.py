@@ -202,3 +202,11 @@ def short_time(iso_text: str | None) -> str:
         return iso_text
     mauritius = timezone(timedelta(hours=4))
     return moment.astimezone(mauritius).strftime("%d %b %H:%M")
+
+
+def today_text() -> str:
+    """Today's date in Mauritius time, e.g. '09 Oct 2026' (used in the report footer)."""
+    from datetime import datetime, timedelta, timezone
+
+    mauritius = timezone(timedelta(hours=4))
+    return datetime.now(mauritius).strftime("%d %b %Y")

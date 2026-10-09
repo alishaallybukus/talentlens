@@ -138,11 +138,21 @@ def fix_profile(profile: CandidateProfile, cv_text: str, today: date) -> Candida
         found = re.search(PHONE_PATTERN, cv_text)
         profile.phone = found.group(0).strip() if found else None
 
+    # A model can invent a "career break" role (seen with qwen2.5 on Kevin's CV).
+    # A break is only kept if the CV itself mentions one.
+    cv_mentions_break = re.search(guardrails.CAREER_BREAK_PATTERN, cv_text, flags=re.IGNORECASE) is not None
+    if not cv_mentions_break:
+        profile.roles = [role for role in profile.roles if not guardrails.is_career_break(role)]
+
     years = guardrails.compute_experience_years(profile.roles, today)
     if years is not None:
         profile.total_years_experience = years.total
         profile.relevant_years_experience = years.relevant
         profile.career_gaps = guardrails.find_career_gaps(profile.roles, today)
+    elif not cv_mentions_break:
+        # The dates can't be checked, so the model's gaps can't be either: drop them
+        # rather than ask a candidate about a gap that may not exist.
+        profile.career_gaps = []
     return profile
 
 

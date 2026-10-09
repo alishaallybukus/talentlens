@@ -143,3 +143,63 @@ def timeline_row(name: str, steps: list[str], note: str = "") -> str:
 def status_line(text: str, kind: str = "primary") -> str:
     """A highlighted one-line status, e.g. "Approved by Alisha at 10:42"."""
     return f"<p>{chip(text, kind)}</p>"
+
+
+# --- Review page pieces ---------------------------------------------------------
+
+# A small icon for each flag code (spec 6), always shown with the message as a tooltip.
+FLAG_ICONS: dict[str, str] = {
+    "missing_info": "❓",
+    "salary_above_band": "💰",
+    "salary_not_comparable": "💱",
+    "outside_mauritius": "🌍",
+    "career_gap": "⏸",
+    "protected_info_redacted": "🛡",
+    "prompt_injection": "⚠",
+    "unverified_evidence": "🔎",
+    "bias_filtered": "⚖",
+    "references_later": "📄",
+}
+
+SEVERITY_KINDS: dict[str, str] = {"info": "info", "warning": "partial", "critical": "missing"}
+
+DECISION_KINDS: dict[str, str] = {
+    "Pending": "neutral",
+    "Shortlist": "met",
+    "Hold": "partial",
+    "Reject": "missing",
+}
+
+
+def flag_icons(flags) -> str:
+    """One icon per flag, with the flag's message on hover."""
+    icons = []
+    for flag in flags:
+        icon = FLAG_ICONS.get(flag.code, "•")
+        icons.append(f'<span class="tl-flag-icon" title="{safe(flag.message)}">{icon}</span>')
+    return "".join(icons)
+
+
+def flag_chip(flag) -> str:
+    """A flag as a chip: icon, message and the guideline clause, coloured by severity."""
+    kind = SEVERITY_KINDS.get(flag.severity, "neutral")
+    guideline = f" ({flag.guideline})" if flag.guideline else ""
+    return chip(f"{FLAG_ICONS.get(flag.code, '•')} {flag.message}{guideline}", kind)
+
+
+def decision_chip(decision: str) -> str:
+    """The recruiter's decision. It's the human's call, so it's shown apart from the AI band."""
+    label = "Decision: Pending" if decision == "Pending" else f"Decision: {decision}"
+    return chip(label, DECISION_KINDS.get(decision, "neutral"))
+
+
+def ai_note() -> str:
+    """Microcopy shown next to every band (FR-R6)."""
+    return '<span class="tl-ai-note">AI recommendation, not a decision</span>'
+
+
+def html_table(headers: list[str], rows: list[list[str]], css_class: str = "tl-table") -> str:
+    """A simple table. Cells must already be safe HTML (use safe() or the chip functions)."""
+    head = "".join(f"<th>{header}</th>" for header in headers)
+    body = "".join("<tr>" + "".join(f"<td>{cell}</td>" for cell in row) + "</tr>" for row in rows)
+    return f'<div class="tl-table-wrap"><table class="{css_class}"><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table></div>'

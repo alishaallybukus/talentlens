@@ -13,7 +13,17 @@ import streamlit as st
 
 from core.config import Settings, get_settings
 from core.memory import Memory
-from ui import components, page_candidates, page_job_setup, page_screening, state
+from core.report import count_decisions
+from ui import (
+    components,
+    page_behind_the_scenes,
+    page_candidates,
+    page_job_setup,
+    page_report,
+    page_review,
+    page_screening,
+    state,
+)
 
 APP_NAME = "TalentLens"
 TAGLINE = "AI does the reading. You make the call."
@@ -43,6 +53,14 @@ def step_is_done(page_key: str, memory: Memory) -> bool:
         return len(memory.list_documents(kind="cv")) > 0
     if page_key == "screening":
         return run is not None and any(c.error is None for c in run.candidates)
+    if run is None:
+        return False
+    if page_key == "review":  # every screened candidate has a decision
+        counts = count_decisions(run, memory.get_decisions(run.run_id))
+        return sum(counts.values()) > 0 and counts["Pending"] == 0
+    if page_key == "report":
+        report = memory.get_report(run.run_id)
+        return report is not None and report["approved_at"] is not None
     return False
 
 
@@ -140,22 +158,18 @@ def show_sidebar(settings: Settings, memory: Memory) -> None:
 # ===========================================================================
 
 
-def show_coming_soon(title: str) -> None:
-    st.header(title)
-    st.info("This page arrives in Phase 4 of the build.")
+PAGE_RENDERERS = {
+    "job_setup": page_job_setup.render,
+    "candidates": page_candidates.render,
+    "screening": page_screening.render,
+    "review": page_review.render,
+    "report": page_report.render,
+    "behind": page_behind_the_scenes.render,
+}
 
 
 def show_page(settings: Settings, memory: Memory) -> None:
-    page = st.session_state["page"]
-    if page == "job_setup":
-        page_job_setup.render(settings, memory)
-    elif page == "candidates":
-        page_candidates.render(settings, memory)
-    elif page == "screening":
-        page_screening.render(settings, memory)
-    else:
-        labels = dict(PAGES)
-        show_coming_soon(labels[page])
+    PAGE_RENDERERS[st.session_state["page"]](settings, memory)
 
 
 def main() -> None:

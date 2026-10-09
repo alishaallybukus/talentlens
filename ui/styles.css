@@ -109,3 +109,31 @@ details.tl-clause[open] div {
 
 /* Readable at 110 to 125% zoom: keep text at least 16px. */
 .stMarkdown p, .stMarkdown li { font-size: 1rem; }
+
+/* --- Review page ---------------------------------------------------------- */
+.tl-ai-note { color: var(--tl-muted); font-size: 0.82rem; font-style: italic; }
+.tl-flag-icon { font-size: 1.05rem; margin-right: 4px; cursor: help; }
+.tl-candidate-card { display: flex; align-items: center; gap: 14px; }
+.tl-candidate-card .tl-card-body { flex: 1; }
+.tl-rank { font-weight: 700; color: var(--tl-muted); min-width: 28px; font-variant-numeric: tabular-nums; }
+
+.tl-table-wrap { overflow-x: auto; margin-bottom: 12px; }
+table.tl-table, table.tl-matrix {
+  border-collapse: collapse; width: 100%; background: var(--tl-surface);
+  border: 1px solid var(--tl-border); border-radius: 8px; font-size: 0.92rem;
+}
+table.tl-table th, table.tl-matrix th {
+  text-align: left; background: var(--tl-primary-tint); color: var(--tl-primary-dark);
+  padding: 8px 10px; font-weight: 600; border-bottom: 1px solid var(--tl-border);
+}
+table.tl-table td, table.tl-matrix td {
+  padding: 8px 10px; border-bottom: 1px solid var(--tl-border); vertical-align: top; color: var(--tl-text);
+}
+table.tl-matrix td, table.tl-matrix th { text-align: center; white-space: nowrap; }
+table.tl-matrix td:first-child, table.tl-matrix th:first-child { text-align: left; }
+.tl-quote { font-style: italic; color: var(--tl-text); }
+.tl-brief h4 { margin: 10px 0 2px 0; color: var(--tl-primary-dark); font-size: 1rem; }
+.tl-warning-box {
+  background: var(--tl-missing-bg); color: var(--tl-missing); border-radius: 8px;
+  padding: 10px 14px; margin: 6px 0; font-family: monospace; font-size: 0.88rem; white-space: pre-wrap;
+}

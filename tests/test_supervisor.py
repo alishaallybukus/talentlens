@@ -313,3 +313,51 @@ def test_job_analyst_fixes_duplicate_ids(index) -> None:
     assert [r.id for r in step.result.must_have] == ["M1", "M2"]
     assert "- TikTok matters" in llm.calls[0]["prompt"]
     assert step.retrieved  # guideline clauses were retrieved for the prompt
+
+
+def test_invented_career_break_is_dropped(read_cv) -> None:
+    """Seen with qwen2.5: a "Career break" role with impossible dates on Kevin's CV, which has no gap."""
+    from core.agents import fix_profile
+    from core.schemas import CandidateProfile, Role
+
+    profile = CandidateProfile(
+        name="Kevin Ramdin",
+        roles=[
+            Role(title="Senior Paid Media Executive", start="Apr 2022", end="Present", is_marketing_role=True),
+            Role(title="Digital Marketing Executive", start="Sep 2020", end="Mar 2022", is_marketing_role=True),
+            Role(title="Career break", start="Apr 2022", end="Sep 2020"),
+        ],
+        career_gaps=["Career break from Apr 2022 to Sep 2020"],
+    )
+    fixed = fix_profile(profile, read_cv("Kevin_Ramdin_CV.docx"), TODAY)
+    assert fixed.career_gaps == []
+    assert all(role.title != "Career break" for role in fixed.roles)
+    assert fixed.relevant_years_experience == 6.2  # Sep 2020 to Oct 2026 = 74 months, recalculated by code
+
+
+def test_unreadable_dates_drop_unverifiable_gaps(read_cv) -> None:
+    from core.agents import fix_profile
+    from core.schemas import CandidateProfile, Role
+
+    profile = CandidateProfile(
+        name="Sarah Moutou",
+        roles=[Role(title="Digital Marketing Specialist", start="Jul 2023", end=None)],
+        career_gaps=["Gap of 8 months"],
+    )
+    assert fix_profile(profile, read_cv("Sarah_Moutou_CV.pdf"), TODAY).career_gaps == []
+
+
+def test_real_career_break_is_kept(read_cv) -> None:
+    from core.agents import fix_profile
+    from core.schemas import CandidateProfile, Role
+
+    profile = CandidateProfile(
+        name="Jean-Marc Lebrun",
+        roles=[
+            Role(title="Marketing Officer", start="Jan 2019", end="Dec 2022", is_marketing_role=True),
+            Role(title="Career break", start="Jan 2023", end="Dec 2024"),
+            Role(title="Marketing Coordinator", start="Jan 2025", end="Present", is_marketing_role=True),
+        ],
+    )
+    gaps = fix_profile(profile, read_cv("Jean-Marc_Lebrun_CV.pdf"), TODAY).career_gaps
+    assert gaps == ["Career break (Jan 2023 - Dec 2024)"]
