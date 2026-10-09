@@ -361,3 +361,83 @@ def test_real_career_break_is_kept(read_cv) -> None:
     )
     gaps = fix_profile(profile, read_cv("Jean-Marc_Lebrun_CV.pdf"), TODAY).career_gaps
     assert gaps == ["Career break (Jan 2023 - Dec 2024)"]
+
+
+def test_availability_counts_as_notice_period(read_cv) -> None:
+    """Seen with qwen2.5: "Availability: 2 weeks" wasn't read, so Ryan was wrongly missing a notice period."""
+    from core.agents import fix_profile
+    from core.guardrails import find_missing_info
+    from core.schemas import CandidateProfile
+
+    profile = CandidateProfile(name="Ryan Chen", email="ryan@example.mu", phone="+230 5000 0000")
+    fixed = fix_profile(profile, read_cv("Ryan_Chen_CV.pdf"), TODAY)
+    assert fixed.notice_period == "2 weeks"
+    assert "notice_period" not in find_missing_info(fixed)
+
+
+def test_labelled_fallback_does_not_invent_kevins_missing_details(read_cv) -> None:
+    from core.agents import fix_profile
+    from core.guardrails import find_missing_info
+    from core.schemas import CandidateProfile
+
+    profile = CandidateProfile(name="Kevin Ramdin")
+    fixed = fix_profile(profile, read_cv("Kevin_Ramdin_CV.docx"), TODAY)
+    assert {"salary_expectation", "notice_period", "right_to_work"} <= set(find_missing_info(fixed))
+
+
+def test_dropped_present_end_date_is_restored(read_cv) -> None:
+    from core.agents import fix_profile
+    from core.schemas import CandidateProfile, Role
+
+    profile = CandidateProfile(
+        name="Sarah Moutou",
+        roles=[
+            Role(title="Digital Marketing Specialist", start="Jul 2023", end=None, is_marketing_role=True),
+            Role(title="Marketing Assistant", start="Jan 2022", end="Jun 2023", is_marketing_role=True),
+        ],
+    )
+    fixed = fix_profile(profile, read_cv("Sarah_Moutou_CV.pdf"), TODAY)
+    assert fixed.roles[0].end == "Present"
+    assert fixed.relevant_years_experience == 4.8  # Jan 2022 to Oct 2026, recalculated by code
+
+
+def comparison_with_m1_missing(prompt):
+    """Like the default comparison, but the minimum-years requirement (M1) comes back missing."""
+    data = default_comparison(prompt)
+    data["results"][0] = {"requirement_id": "M1", "status": "missing", "evidence": None,
+                          "reasoning": "No clear evidence of 3 years.", "guideline_refs": []}
+    return data
+
+
+def kevin_roles_cv_analyst(roles):
+    def handler(prompt):
+        from tests.fake_llm import default_cv_analyst
+
+        data = default_cv_analyst(prompt)
+        data["roles"] = roles
+        return data
+
+    return handler
+
+
+def test_enough_years_by_the_dates_raises_missing_to_met(requirements, index) -> None:
+    """Seen with qwen2.5: Kevin has 6.2 years by his dates, but the 3-years must-have came back missing."""
+    roles = [
+        {"title": "Senior Paid Media Executive", "start": "Apr 2022", "end": "Present", "is_marketing_role": True},
+        {"title": "Digital Marketing Executive", "start": "Sep 2020", "end": "Mar 2022", "is_marketing_role": True},
+    ]
+    llm = FakeLLM({"cv_analyst": kevin_roles_cv_analyst(roles), "comparison": comparison_with_m1_missing})
+    run = screen(["Kevin_Ramdin_CV.docx"], llm, requirements, index)
+    m1 = run.candidates[0].assessment.results[0]
+    assert m1.status == "met" and m1.original_status == "missing"
+    assert m1.verified is True
+    assert m1.evidence == "Senior Paid Media Executive, Pixel & Palm Digital Agency (Apr 2022 - Present)"
+    assert "§4.4" in m1.guideline_refs
+    assert run.candidates[0].score.must_have_gaps == []
+
+
+def test_too_few_years_stays_missing(requirements, index) -> None:
+    roles = [{"title": "Senior Paid Media Executive", "start": "Apr 2025", "end": "Present", "is_marketing_role": True}]
+    llm = FakeLLM({"cv_analyst": kevin_roles_cv_analyst(roles), "comparison": comparison_with_m1_missing})
+    run = screen(["Kevin_Ramdin_CV.docx"], llm, requirements, index)
+    assert run.candidates[0].assessment.results[0].status == "missing"

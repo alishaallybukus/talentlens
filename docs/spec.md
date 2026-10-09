@@ -379,7 +379,7 @@ Runs after the Comparison Agent, in this order:
 1. **Quote check:** every met or partial result needs a quote found in the cleaned CV (section 8.3).
 2. **Revise loop:** if any quote fails and this candidate hasn't been revised yet, the Supervisor sends the Comparison Agent back once with the failing ids. Then it re-checks.
 3. **Still unverified after revision:** the status becomes **missing** (no verified evidence means missing, §3.2). The candidate is flagged `unverified_evidence` (warning) and marked "needs attention".
-4. **Minimum years:** if `min_years` is set and the computed relevant years are lower, `met` is capped at `partial` (§4.4). This is shown in the reasoning.
+4. **Minimum years:** if `min_years` is set and the computed relevant years are lower, `met` is capped at `partial` (§4.4). This is shown in the reasoning. If the years computed from the CV's dates reach the minimum but the result is `missing`, it is raised to `met`, with a verified role line from the CV as evidence (added 9 Oct 2026 with the student's approval, after the Ollama evaluation).
 5. **Concerns filter:** remove any concern that mentions a career gap or break (§2.3). The gap becomes a neutral flag and question instead.
 6. **Flags:** check for missing information, salary above band, outside Mauritius and career gap (section 8.4).
 

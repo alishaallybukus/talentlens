@@ -113,7 +113,7 @@ Return a JSON object matching this schema:
 
 COMPARISON = PromptTemplate(
     name="comparison",
-    version="comparison@v1",
+    version="comparison@v3",
     temperature=0.1,
     system=(
         "You are the Comparison Agent in TalentLens, a recruitment assistant. "
@@ -141,13 +141,15 @@ COMPARISON = PromptTemplate(
 </cv>
 
 Task: assess the candidate against EVERY requirement in <job_requirements>. Return exactly one result per requirement, in the same order.
+- Before you mark a requirement missing, check EVERY part of the CV: the profile summary, each role's title, company and bullet points, education, skills, languages and certifications.
+- The same CV text can be the evidence for more than one requirement (e.g. one bullet can show both social media and paid ads).
 - "met": clear, direct evidence in the CV.
 - "partial": related or transferable evidence only (§3.3), for example sales or retail experience used for marketing, or a lower language level than required; or experience below the minimum years (§4.4).
 - "missing": no evidence in the CV (§3.2). Then evidence is null.
 - evidence: copy the text WORD FOR WORD from inside <cv>, at most about 30 words, as one continuous piece. Do not paraphrase, do not join separate parts with "...", and do not quote the profile.
 - reasoning: one or two sentences explaining the status, citing guideline ids where used.
 - guideline_refs: the clause ids you relied on, e.g. ["§3.3"].
-- Use <computed_years> for any minimum-years requirement.
+- Use <computed_years> for any minimum-years requirement, but quote the CV, never <computed_years>: copy a role line with its dates, e.g. "Marketing Officer, Example Ltd (Jan 2019 - Dec 2022)".
 - Career gaps are never a weakness (§2.3). Do not mention them in concerns.
 - strengths: 2 to 4 job-related strengths. concerns: up to 4 job-related concerns, based on partial or missing requirements.
 
@@ -164,7 +166,7 @@ COMPARISON_REVISION_INSTRUCTIONS = """<previous_answer>
 </previous_answer>
 
 Revision needed: the evidence for these requirement ids was NOT found word for word in the CV: <<failing_ids>>.
-For each of these ids, copy the exact text from the CV, or change the status to missing.
+For each of these ids, copy the exact text from inside <cv> (not from <profile> or <computed_years>), or change the status to missing.
 Keep all other results unchanged. Return the complete JSON object again."""
 
 # ===========================================================================

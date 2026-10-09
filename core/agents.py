@@ -122,11 +122,56 @@ def run_job_analyst(
 EMAIL_PATTERN = r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+"
 PHONE_PATTERN = r"\+\d{1,3}(?:[\s-]?\d{2,4}){2,4}"
 
+# Labelled lines such as "Availability: 2 weeks", for the code fallback below.
+# Each profile field lists the labels a CV may use for it.
+LABELLED_FIELDS: dict[str, list[str]] = {
+    "salary_expectation": ["Salary expectation", "Expected salary"],
+    "notice_period": ["Notice period", "Availability"],
+    "right_to_work": ["Right to work", "Work permit"],
+    "references": ["References"],
+}
+
+
+def labelled_value(cv_text: str, labels: list[str]) -> str | None:
+    """The text after "Label:" at the start of a CV line, or None."""
+    for label in labels:
+        found = re.search(rf"^\s*{re.escape(label)}\s*:\s*(.+?)\s*$", cv_text, flags=re.MULTILINE | re.IGNORECASE)
+        if found:
+            return found.group(1)
+    return None
+
+
+def fill_labelled_fields(profile: CandidateProfile, cv_text: str) -> None:
+    """Fill details the model left empty when the CV states them on a labelled line.
+
+    Seen with qwen2.5: "Availability: Immediately" was not read as a notice period,
+    so the candidate was wrongly flagged as missing it.
+    """
+    for field_name, labels in LABELLED_FIELDS.items():
+        if guardrails.is_missing(getattr(profile, field_name)):
+            value = labelled_value(cv_text, labels)
+            if value:
+                setattr(profile, field_name, value)
+
+
+def restore_present_end_dates(profile: CandidateProfile, cv_text: str) -> None:
+    """A role with a start but no end is set to "Present" when the CV says "<start> - Present".
+
+    Seen with qwen2.5: the end "Present" was dropped, so the years couldn't be recalculated.
+    """
+    for role in profile.roles:
+        if role.start and not role.end:
+            pattern = rf"{re.escape(role.start)}\s*[-–—]\s*(present|current|now|today)\b"
+            if re.search(pattern, cv_text, flags=re.IGNORECASE):
+                role.end = "Present"
+
 
 def fix_profile(profile: CandidateProfile, cv_text: str, today: date) -> CandidateProfile:
     """Code fixes after the CV Analyst.
 
     - Fill in email and phone with a simple pattern search if the model missed them.
+    - Fill in salary, notice period, right to work and references from labelled lines.
+    - Put back a dropped "Present" end date.
     - Recalculate years from the role dates (overlaps merged, career breaks excluded).
       If the dates can't be read, the model's numbers are kept.
     - Recalculate career gaps from the dates too.
@@ -137,6 +182,8 @@ def fix_profile(profile: CandidateProfile, cv_text: str, today: date) -> Candida
     if guardrails.is_missing(profile.phone):
         found = re.search(PHONE_PATTERN, cv_text)
         profile.phone = found.group(0).strip() if found else None
+    fill_labelled_fields(profile, cv_text)
+    restore_present_end_dates(profile, cv_text)
 
     # A model can invent a "career break" role (seen with qwen2.5 on Kevin's CV).
     # A break is only kept if the CV itself mentions one.
@@ -361,6 +408,55 @@ def cap_by_minimum_years(
                 result.guideline_refs.append("§4.4")
 
 
+def role_line_quote(profile: CandidateProfile, cv_text: str) -> str | None:
+    """A CV line naming a marketing role and its start date, e.g. "Digital Marketing Executive, X (Sep 2020 - Mar 2022)".
+
+    Used as evidence for a minimum-years requirement. Returns None if no such line is found.
+    """
+    for role in profile.roles:
+        if not role.is_marketing_role or not role.start:
+            continue
+        for line in cv_text.splitlines():
+            if role.title.lower() in line.lower() and role.start.lower() in line.lower():
+                quote = line.strip()
+                if guardrails.is_quote_verified(quote, cv_text):
+                    return quote
+    return None
+
+
+def raise_by_minimum_years(
+    assessment: MatchAssessment, requirements: JobRequirements, profile: CandidateProfile, cv_text: str, today: date
+) -> None:
+    """Step 4b: when the CV's dates prove enough years, "missing" becomes "met" (§4.4).
+
+    Seen with qwen2.5: Kevin has 6.2 years by his dates, yet the 3-years must-have came back missing.
+    Only years that CODE worked out from the dates count (never the model's estimate), and the
+    evidence is a role line that is verified against the CV like any other quote.
+    """
+    computed = guardrails.compute_experience_years(profile.roles, today)
+    if computed is None:
+        return
+    quote = role_line_quote(profile, cv_text)
+    if quote is None:
+        return
+    requirement_by_id = {requirement.id: requirement for requirement in all_requirements(requirements)}
+    for result in assessment.results:
+        requirement = requirement_by_id.get(result.requirement_id)
+        if requirement is None or requirement.min_years is None:
+            continue
+        if result.status == "missing" and computed.relevant >= requirement.min_years:
+            result.original_status = result.status
+            result.status = "met"
+            result.evidence = quote
+            result.verified = True
+            result.reasoning += (
+                f" [Raised to met by the reviewer: the CV's dates give {computed.relevant} years of relevant "
+                f"experience, at least the minimum of {requirement.min_years:g} (§4.4).]"
+            )
+            if "§4.4" not in result.guideline_refs:
+                result.guideline_refs.append("§4.4")
+
+
 def remove_gap_concerns(assessment: MatchAssessment) -> None:
     """Step 5: career gaps are never a concern (§2.3). They become a neutral question instead."""
     assessment.concerns = [concern for concern in assessment.concerns if not guardrails.mentions_career_gap(concern)]
@@ -399,11 +495,16 @@ class ReviewOutcome:
 
 
 def finish_review(
-    assessment: MatchAssessment, requirements: JobRequirements, profile: CandidateProfile, intake: IntakeResult
+    assessment: MatchAssessment,
+    requirements: JobRequirements,
+    profile: CandidateProfile,
+    intake: IntakeResult,
+    today: date | None = None,
 ) -> ReviewOutcome:
     """Steps 3 to 6 of the Guardrail Reviewer, run after any revision."""
     downgraded = downgrade_unverified(assessment)
     cap_by_minimum_years(assessment, requirements, profile.relevant_years_experience)
+    raise_by_minimum_years(assessment, requirements, profile, intake.clean_text, today or date.today())
     remove_gap_concerns(assessment)
     flags = build_flags(intake, profile, requirements, downgraded)
     return ReviewOutcome(

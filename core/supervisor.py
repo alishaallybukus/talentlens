@@ -172,7 +172,7 @@ def screen_candidate(
         tracer.agent_done("Comparison", "Revised the unverified quotes", label, revision_step, status="revised")
         agents.check_quotes(assessment, cv_text)
 
-    review = agents.finish_review(assessment, requirements, profile, intake)
+    review = agents.finish_review(assessment, requirements, profile, intake, today)
     review_note = f"{len(review.flags)} flag(s)"
     if review.downgraded_ids:
         review_note += f"; still unverified, marked missing: {', '.join(review.downgraded_ids)}"
