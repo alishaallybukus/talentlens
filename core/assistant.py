@@ -118,7 +118,12 @@ class CVTools:
                 continue
             if band and candidate.score.band.lower() != str(band).lower():
                 continue
-            rows.append(f"- {candidate.profile.name}: score {candidate.score.overall:.0f}, {candidate.score.band}")
+            # Each required detail spelled out as given or MISSING: easy for a small model to read correctly.
+            details = "; ".join(
+                f"{name}: {'MISSING' if key in candidate.missing_info else 'given'}"
+                for key, name in guardrails.MISSING_INFO_NAMES.items()
+            )
+            rows.append(f"- {candidate.profile.name}: score {candidate.score.overall:.0f}, {candidate.score.band}. {details}")
         return "\n".join(rows) or "No candidates match."
 
     def run(self, tool: str, arguments: dict) -> str:
