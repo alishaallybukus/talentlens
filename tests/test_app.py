@@ -219,3 +219,26 @@ def test_reset_decisions_needs_confirmation(tmp_path, monkeypatch) -> None:
     click(app, "Yes, reset")
     assert no_errors(app)
     assert "0 of 6 candidates decided" in all_text(app) or "Decision: Pending" in all_text(app)
+
+
+def test_access_code_is_required_when_set(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", "sqlite:///" + (tmp_path / "gate.db").as_posix())
+    monkeypatch.setenv("APP_ACCESS_CODE", "demo-code")
+    app = AppTest.from_file(APP_FILE, default_timeout=APP_TIMEOUT)
+    app.run()
+    assert len(app.header) == 0  # nothing shown before the code
+    app.text_input(key="access_code_input").input("wrong").run()
+    click(app, "Enter")
+    assert any("isn't right" in error.value for error in app.error)
+    app.text_input(key="access_code_input").input("demo-code").run()
+    click(app, "Enter")
+    assert no_errors(app)
+    assert app.header[0].value == "1. Job setup"
+
+
+def test_deployed_app_hides_ollama(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", "sqlite:///" + (tmp_path / "cloud.db").as_posix())
+    monkeypatch.setenv("DEPLOYED", "true")
+    app = AppTest.from_file(APP_FILE, default_timeout=APP_TIMEOUT)
+    app.run()
+    assert list(app.radio(key="provider").options) == ["Gemini"]  # Ollama is hidden

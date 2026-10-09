@@ -163,13 +163,29 @@ def default_database_url() -> str:
     return "sqlite:///" + DEFAULT_SQLITE_PATH.as_posix()
 
 
-def make_engine(database_url: str) -> Engine:
-    """Connect to the database. An empty URL means the local SQLite file.
+def to_sqlalchemy_url(database_url: str) -> str:
+    """Pick the database driver from the URL.
 
-    Postgres support (Neon) is added in Phase 7.
+    Neon gives a URL starting "postgresql://" (or "postgres://"). SQLAlchemy needs to be
+    told to use the psycopg driver, so it becomes "postgresql+psycopg://".
+    An empty URL means the local SQLite file.
     """
-    url = database_url.strip() or default_database_url()
-    # pool_pre_ping checks a connection still works before using it.
+    url = database_url.strip()
+    if not url:
+        return default_database_url()
+    for prefix in ("postgresql://", "postgres://"):
+        if url.startswith(prefix):
+            return "postgresql+psycopg://" + url[len(prefix):]
+    return url
+
+
+def make_engine(database_url: str) -> Engine:
+    """Connect to the database: SQLite locally, Postgres (Neon) in the cloud."""
+    url = to_sqlalchemy_url(database_url)
+    if url.startswith("postgresql"):
+        # Neon's database sleeps after 5 minutes idle and drops old connections.
+        # pool_pre_ping tests each connection before use; pool_recycle replaces old ones.
+        return create_engine(url, pool_pre_ping=True, pool_recycle=240)
     return create_engine(url, pool_pre_ping=True)
 
 

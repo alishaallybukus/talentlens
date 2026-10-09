@@ -9,6 +9,8 @@ Each page lives in its own file in the ui/ folder.
 
 from __future__ import annotations
 
+import hmac
+
 import streamlit as st
 
 from core.config import Settings, get_settings
@@ -172,10 +174,31 @@ def show_page(settings: Settings, memory: Memory) -> None:
     PAGE_RENDERERS[st.session_state["page"]](settings, memory)
 
 
+def access_granted(settings: Settings) -> bool:
+    """FR-X3: when APP_ACCESS_CODE is set, ask for it before showing anything.
+
+    This stops strangers using up the free Gemini quota on the public link.
+    """
+    if not settings.app_access_code or st.session_state.get("access_granted"):
+        return True
+    components.show(components.logo_html(APP_NAME, TAGLINE))
+    st.markdown("This demo is protected. Please enter the access code.")
+    code = st.text_input("Access code", type="password", key="access_code_input")
+    if st.button("Enter", type="primary"):
+        # compare_digest takes the same time whatever the input, so the code can't be guessed by timing.
+        if hmac.compare_digest(code.strip(), settings.app_access_code):
+            st.session_state["access_granted"] = True
+            st.rerun()
+        st.error("That code isn't right. Please check it and try again.")
+    return False
+
+
 def main() -> None:
     st.set_page_config(page_title=APP_NAME, page_icon="🔍", layout="wide")
     components.load_styles()
     settings = get_settings()
+    if not access_granted(settings):
+        return
     try:
         memory = state.get_memory(settings.database_url)
         state.init_session(settings, memory)

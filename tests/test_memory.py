@@ -222,3 +222,29 @@ def test_data_survives_reopening_the_database(database_url) -> None:
     assert len(reopened.list_documents()) == 1
     assert len(reopened.list_audit()) == 2
     reopened.close()
+
+
+# --- Postgres support (Phase 7) ------------------------------------------------
+
+
+def test_neon_urls_use_the_psycopg_driver() -> None:
+    from core.memory import to_sqlalchemy_url
+
+    assert to_sqlalchemy_url("postgresql://u:p@host/db?sslmode=require") == "postgresql+psycopg://u:p@host/db?sslmode=require"
+    assert to_sqlalchemy_url("postgres://u:p@host/db").startswith("postgresql+psycopg://")
+    assert to_sqlalchemy_url("sqlite:///x.db") == "sqlite:///x.db"
+    assert to_sqlalchemy_url("").startswith("sqlite:///")
+
+
+def test_every_table_compiles_for_postgres() -> None:
+    """The same tables must work on Neon: generate the Postgres CREATE TABLE statements without a database."""
+    from sqlalchemy import create_mock_engine
+
+    from core.memory import metadata
+
+    statements: list[str] = []
+    engine = create_mock_engine("postgresql+psycopg://", lambda sql, *args, **kwargs: statements.append(str(sql.compile(dialect=engine.dialect))))
+    metadata.create_all(engine, checkfirst=False)
+    created = " ".join(statements)
+    for table in ["preferences", "jobs", "documents", "runs", "decisions", "reports", "audit", "llm_cache"]:
+        assert f"CREATE TABLE {table}" in created
