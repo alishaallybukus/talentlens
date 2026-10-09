@@ -225,3 +225,46 @@ def logo_html(app_name: str, tagline: str) -> str:
         f'<div class="tl-logo-row">{svg}<div><p class="tl-logo">{safe(app_name)}</p>'
         f'<p class="tl-tagline">{safe(tagline)}</p></div></div>'
     )
+
+
+# --- Page header, KPI tiles and bars (UI redesign) --------------------------------------
+
+
+def page_header(eyebrow: str, title: str, subtitle: str) -> None:
+    """The top of every page: a small step label, the title and one line of help."""
+    show(f'<p class="tl-eyebrow">{safe(eyebrow)}</p>')
+    st.header(title, anchor=False)
+    show(f'<p class="tl-subtitle">{subtitle}</p>')  # subtitle is our own text and may contain <b>
+
+
+def kpi_tile(label: str, value: object, accent: str = "") -> str:
+    """A statistic tile with a coloured top edge. accent: strong, possible, notmatch, primary or ''."""
+    accent_class = f" tl-accent-{accent}" if accent else ""
+    return (
+        f'<div class="tl-kpi{accent_class}"><div class="tl-kpi-value">{safe(value)}</div>'
+        f'<div class="tl-kpi-label">{safe(label)}</div></div>'
+    )
+
+
+def show_kpis(tiles: list[tuple[str, object, str]]) -> None:
+    """Draw KPI tiles side by side: (label, value, accent)."""
+    columns = st.columns(len(tiles))
+    for column, (label, value, accent) in zip(columns, tiles):
+        with column:
+            show(kpi_tile(label, value, accent))
+
+
+def bar_row(label: str, percent: float) -> str:
+    """A labelled progress bar, e.g. Must-haves ███████░░ 86%."""
+    width = max(0.0, min(percent, 100.0))
+    return (
+        f'<div class="tl-bar-row"><span class="tl-bar-label">{safe(label)}</span>'
+        f'<span class="tl-bar"><span style="width:{width:.0f}%"></span></span>'
+        f'<span class="tl-bar-value">{width:.0f}%</span></div>'
+    )
+
+
+def status_dot(status: str) -> str:
+    """A compact round status marker for the comparison matrix: symbol plus colour."""
+    symbol, word = STATUS_SYMBOLS.get(status, ("?", status))
+    return f'<span class="tl-dot tl-{safe(status)}" title="{word}">{symbol}</span>'

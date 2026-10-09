@@ -33,7 +33,7 @@ def go_to(test_app: AppTest, page_key: str) -> None:
 
 def test_app_starts_on_job_setup(app) -> None:
     assert no_errors(app)
-    assert app.header[0].value == "1. Job setup"
+    assert app.header[0].value == "Job setup"
 
 
 @pytest.mark.parametrize("page_key", ["candidates", "screening", "review", "report", "behind"])
@@ -233,7 +233,7 @@ def test_access_code_is_required_when_set(tmp_path, monkeypatch) -> None:
     app.text_input(key="access_code_input").input("demo-code").run()
     click(app, "Enter")
     assert no_errors(app)
-    assert app.header[0].value == "1. Job setup"
+    assert app.header[0].value == "Job setup"
 
 
 def test_deployed_app_hides_ollama(tmp_path, monkeypatch) -> None:
@@ -248,7 +248,7 @@ def test_extras_work_in_the_app(tmp_path, monkeypatch) -> None:
     """Excel download, Kevin's email draft, and Ask the CVs, with the fake model."""
     app = screened_app(tmp_path, monkeypatch)
     go_to(app, "review")
-    assert any(button.label == "Download Excel" for button in app.get("download_button"))
+    assert any("Download Excel" in button.label for button in app.get("download_button"))
     cid = candidate_id(app, "Kevin")
     app.selectbox(key="selected_candidate").set_value(cid).run()
     app.button(key=f"draft_email_{cid}").click().run()

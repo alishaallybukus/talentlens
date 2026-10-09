@@ -79,14 +79,13 @@ def approve_report(memory: Memory, run: RunResult) -> None:
 
 
 def show_counts(counts: dict[str, int]) -> None:
-    components.show_tiles(
+    components.show_kpis(
         [
-            ("Shortlisted", counts["Shortlist"]),
-            ("On hold", counts["Hold"]),
-            ("Rejected", counts["Reject"]),
-            ("Pending", counts["Pending"]),
-        ],
-        per_row=4,
+            ("Shortlisted", counts["Shortlist"], "strong"),
+            ("On hold", counts["Hold"], "possible"),
+            ("Rejected", counts["Reject"], "notmatch"),
+            ("Pending", counts["Pending"], ""),
+        ]
     )
 
 
@@ -150,7 +149,7 @@ def show_editor(memory: Memory, run: RunResult) -> None:
         st.text_area("Report text", key=EDITOR_KEY, height=560, label_visibility="collapsed")
     with columns[1]:
         st.markdown("**Preview**")
-        with st.container(border=True, height=560):
+        with st.container(height=560, key="card-preview"):
             st.markdown(st.session_state.get(EDITOR_KEY, ""))
     st.button("Approve report", type="primary", on_click=approve_report, args=(memory, run),
               disabled=not st.session_state.get(EDITOR_KEY, "").strip(),
@@ -158,21 +157,22 @@ def show_editor(memory: Memory, run: RunResult) -> None:
 
 
 def render(settings: Settings, memory: Memory) -> None:
-    st.header("5. Shortlist report")
-    st.markdown(
-        "Draft the report for the hiring manager. It includes **only the candidates you shortlisted**; "
-        "the others appear as counts. Edit it, approve it, then download it."
+    components.page_header(
+        "Step 5 of 6 · Checkpoint 3",
+        "Shortlist report",
+        "Draft the report for the hiring manager. It includes <b>only the candidates you shortlisted</b>; "
+        "the others appear as counts. Edit it, approve it, then download it.",
     )
     run = state.current_run()
     if run is None:
-        st.info("No screening yet. Run the screening on page 3, then make your decisions on page 4.")
+        st.info("No screening yet. Run the screening in step 3, then make your decisions in step 4.")
         return
 
     decisions = memory.get_decisions(run.run_id)
     counts = count_decisions(run, decisions)
     show_counts(counts)
     if not shortlisted_candidates(run, decisions):
-        st.info("Shortlist at least one candidate on page 4 (Review) to draft the report.")
+        st.info("Shortlist at least one candidate in step 4 (Review) to draft the report.")
         return
     if counts["Pending"]:
         st.warning(f"{counts['Pending']} candidate(s) are still pending. You can still draft the report.")

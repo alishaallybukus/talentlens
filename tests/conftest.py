@@ -34,3 +34,9 @@ def read_cv():
         return read_document_file(cv_path(file_name))
 
     return reader
+
+
+@pytest.fixture(autouse=True)
+def no_access_code(monkeypatch):
+    """Tests never depend on the developer's .env access code (the access-code test sets its own)."""
+    monkeypatch.setenv("APP_ACCESS_CODE", "")

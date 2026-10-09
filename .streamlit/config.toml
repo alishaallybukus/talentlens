@@ -1,12 +1,28 @@
 # Streamlit settings for TalentLens: the colour theme (spec 12.3) and server options.
+# Fonts load from Google Fonts; offline, the app falls back to the system font.
 
 [theme]
 base = "light"
-primaryColor = "#0E7C7B"              # teal: buttons, links, active step
-backgroundColor = "#F6F7F5"           # page background
-secondaryBackgroundColor = "#FFFFFF"  # sidebar and input backgrounds
+primaryColor = "#0E7C7B"               # teal: buttons, links, active step
+backgroundColor = "#F6F7F5"            # page background
+secondaryBackgroundColor = "#EEF2F1"   # input backgrounds
 textColor = "#1B2430"
-font = "sans serif"
+borderColor = "#DDE3E6"
+showWidgetBorder = true
+baseRadius = "10px"
+buttonRadius = "10px"
+font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap, sans-serif"
+headingFontWeights = [700, 650, 600, 600, 600, 600]
+headingFontSizes = ["2rem", "1.45rem", "1.2rem", "1.05rem", "1rem", "0.9rem"]
+linkColor = "#0A5E5D"
+dataframeHeaderBackgroundColor = "#F1F5F4"
+greenColor = "#1E7F4F"
+redColor = "#B3261E"
+orangeColor = "#9A6700"
+blueColor = "#2B5FA6"
+
+[client]
+toolbarMode = "viewer"   # hide the developer "Deploy" menu
 
 [server]
 maxUploadSize = 20  # MB per file; CVs are small

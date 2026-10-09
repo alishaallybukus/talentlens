@@ -104,22 +104,30 @@ def timeline_html(trace: list[TraceEvent]) -> str:
 
 
 def show_statistics(run: RunResult) -> None:
+    """Five headline numbers, then the reliability counters as a quiet row of chips (FR-S6)."""
     stats = run.stats
     minutes, seconds = divmod(int(stats.get("total_seconds", 0)), 60)
-    components.show_tiles(
+    components.show_kpis(
         [
-            ("Candidates", stats.get("candidates", 0)),
-            ("AI calls", stats.get("ai_calls", 0)),
-            ("Cache hits", stats.get("cache_hits", 0)),
-            ("Tokens in / out", f"{stats.get('tokens_in', 0):,} / {stats.get('tokens_out', 0):,}"),
-            ("Total time", f"{minutes}m {seconds:02d}s"),
-            ("JSON repairs", stats.get("repairs", 0)),
-            ("Revisions", stats.get("revisions", 0)),
-            ("Retries", stats.get("retries", 0)),
-            ("Model fallbacks", stats.get("fallbacks", 0)),
-            ("Errors", stats.get("errors", 0)),
+            ("Candidates", stats.get("candidates", 0), "primary"),
+            ("AI calls", stats.get("ai_calls", 0), ""),
+            ("Cache hits", stats.get("cache_hits", 0), ""),
+            ("Tokens in / out", f"{stats.get('tokens_in', 0):,} / {stats.get('tokens_out', 0):,}", ""),
+            ("Total time", f"{minutes}m {seconds:02d}s", ""),
         ]
     )
+    counters = [
+        ("JSON repairs", stats.get("repairs", 0)),
+        ("Revisions", stats.get("revisions", 0)),
+        ("Retries", stats.get("retries", 0)),
+        ("Model fallbacks", stats.get("fallbacks", 0)),
+        ("Errors", stats.get("errors", 0)),
+    ]
+    chips = "".join(
+        components.chip(f"{label}: {value}", "missing" if label == "Errors" and value else "neutral")
+        for label, value in counters
+    )
+    components.show(f'<div style="margin-top:8px">{chips}</div>')
 
 
 # ===========================================================================
@@ -172,7 +180,7 @@ def show_error_rows(settings: Settings, memory: Memory, run: RunResult) -> None:
     st.markdown("#### CVs that need a retry")
     documents_by_id = {intake.content_hash[:12]: intake for intake in state.active_cvs(memory)}
     for candidate in failed:
-        with st.container(border=True):
+        with st.container(key=f"card-error-{candidate.candidate_id}"):
             columns = st.columns([5, 1])
             columns[0].markdown(f"**{candidate.file_name}**: {candidate.error}")
             intake = documents_by_id.get(candidate.candidate_id)
@@ -189,18 +197,19 @@ def screening_blockers(memory: Memory) -> list[str]:
     """Why the Run button is disabled, in plain words (FR-J5)."""
     reasons = []
     if state.approved_requirements() is None:
-        reasons.append("Approve the requirements first (page 1).")
+        reasons.append("Approve the requirements first (step 1).")
     if not memory.list_documents(kind="cv"):
-        reasons.append("Add at least one CV (page 2).")
+        reasons.append("Add at least one CV (step 2).")
     return reasons
 
 
 def render(settings: Settings, memory: Memory) -> None:
-    st.header("3. Screening")
-    st.markdown(
-        "Run the AI agents on every CV. For each candidate: the **CV Analyst** extracts facts, the "
-        "**Comparison Agent** checks each requirement with quotes, the **Reviewer** (code) verifies the "
-        "quotes, and the **Report Agent** writes the brief. Scores are calculated by code, not by the AI."
+    components.page_header(
+        "Step 3 of 6 · Multi-agent pipeline",
+        "Screening",
+        "For each CV: the <b>CV Analyst</b> extracts facts → the <b>Comparison Agent</b> checks each requirement "
+        "with quotes → the <b>Reviewer</b> (code) verifies them → the <b>Report Agent</b> writes the brief. "
+        "Scores are calculated by code, not by the AI.",
     )
 
     blockers = screening_blockers(memory)
@@ -208,16 +217,20 @@ def render(settings: Settings, memory: Memory) -> None:
     requirements = state.approved_requirements()
     is_current_run = run is not None and not run_needs_new(run, requirements) if requirements else False
 
-    columns = st.columns([1, 1, 3])
-    run_clicked = columns[0].button("Run screening", type="primary", disabled=bool(blockers))
-    new_clicked = columns[1].button(
-        "Screen new CVs",
-        disabled=bool(blockers) or not is_current_run,
-        help="Adds CVs uploaded after the last run to the same ranking" if is_current_run
-        else "Run screening first: new CVs join an existing run",
-    )
-    for reason in blockers:
-        columns[2].caption(reason)
+    with st.container(key="card-run-actions"):
+        columns = st.columns([1.1, 1.1, 3], vertical_alignment="center")
+        run_clicked = columns[0].button("Run screening", type="primary", disabled=bool(blockers), width="stretch")
+        new_clicked = columns[1].button(
+            "Screen new CVs",
+            disabled=bool(blockers) or not is_current_run,
+            width="stretch",
+            help="Adds CVs uploaded after the last run to the same ranking" if is_current_run
+            else "Run screening first: new CVs join an existing run",
+        )
+        for reason in blockers:
+            columns[2].caption(reason)
+        if not blockers:
+            columns[2].caption("CVs already screened with the same settings come back instantly from the cache.")
     if run is not None and requirements is not None and not is_current_run:
         st.info("The approved requirements changed since the last run, so **Run screening** will start a new run.")
 
@@ -232,7 +245,11 @@ def render(settings: Settings, memory: Memory) -> None:
         st.info("No screening yet. Approve the requirements, add CVs, then click **Run screening**.")
         return
 
-    st.caption(f"Run {run.run_id} · {run.provider} / {run.model} · started {state.short_time(run.created_at)}")
+    components.show(
+        '<p class="tl-section-title" style="margin-top:14px">Pipeline timeline</p>'
+        + components.chip(f"Run {run.run_id}", "neutral") + components.chip(f"{run.provider} · {run.model}", "info")
+        + components.chip(f"Started {state.short_time(run.created_at)}", "neutral")
+    )
     components.show(timeline_html(run.trace))
     show_statistics(run)
     show_error_rows(settings, memory, run)

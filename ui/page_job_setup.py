@@ -273,10 +273,11 @@ def offer_saved_checklist(memory: Memory) -> None:
 
 
 def render(settings: Settings, memory: Memory) -> None:
-    st.header("1. Job setup")
-    st.markdown(
-        "Load the job description and hiring guidelines. The **Job Analyst Agent** drafts a requirements "
-        "checklist; you edit it and approve it. Only an approved checklist is used for screening."
+    components.page_header(
+        "Step 1 of 6 · Checkpoint 1",
+        "Job setup",
+        "Load the job description and hiring guidelines. The <b>Job Analyst Agent</b> drafts a requirements "
+        "checklist; you edit it and approve it. Only an approved checklist is used for screening.",
     )
 
     approved = state.approved_requirements()
@@ -284,16 +285,21 @@ def render(settings: Settings, memory: Memory) -> None:
         show_approved(approved)
         return
 
-    show_job_description_input()
-    show_guidelines_input(memory)
-    st.divider()
+    columns = st.columns([1.25, 1], gap="medium")
+    with columns[0], st.container(key="card-jd"):
+        show_job_description_input()
+    with columns[1], st.container(key="card-guidelines"):
+        show_guidelines_input(memory)
 
     has_job = bool(st.session_state["jd_text"])
-    if st.button("Extract requirements", type="primary", disabled=not has_job,
-                 help=None if has_job else "Load a job description first"):
-        extract_requirements(settings, memory)
-    if not has_job:
-        st.caption("Load a job description first.")
+    with st.container(key="card-extract"):
+        action = st.columns([1.3, 4], vertical_alignment="center")
+        if action[0].button("Extract requirements", type="primary", disabled=not has_job, width="stretch",
+                            help=None if has_job else "Load a job description first"):
+            extract_requirements(settings, memory)
+        action[1].caption("The Job Analyst reads the job description, the relevant guideline clauses and your "
+                          "saved preferences, then drafts the checklist." if has_job
+                          else "Load a job description first.")
 
     draft = st.session_state["draft_requirements"]
     if draft is not None:

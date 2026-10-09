@@ -62,16 +62,18 @@ def ask(settings: Settings, memory: Memory, tools: CVTools, question: str) -> No
 
 
 def render(settings: Settings, memory: Memory) -> None:
-    st.header("Ask the CVs")
-    st.markdown(
+    components.page_header(
+        "Assistant · tool calling",
+        "Ask the CVs",
         "Ask a question across all screened CVs. The assistant looks things up with tools and quotes the CVs; "
-        "every quote is checked. It never ranks or decides: that's your job."
+        "every quote is checked. It never ranks or decides: that's your job.",
     )
     tools = build_tools(memory)
     if tools is None or not tools.candidates:
-        st.info("No screened candidates yet. Run the screening on page 3 first.")
+        st.info("No screened candidates yet. Run the screening in step 3 first.")
         return
 
+    st.markdown('<p class="tl-section-title">Try asking</p>', unsafe_allow_html=True)
     columns = st.columns(len(EXAMPLE_QUESTIONS))
     clicked = None
     for column, example in zip(columns, EXAMPLE_QUESTIONS):
@@ -81,6 +83,17 @@ def render(settings: Settings, memory: Memory) -> None:
     question = typed or clicked
     if question:
         ask(settings, memory, tools, question)
+
+    if not st.session_state.get("ask_history"):
+        with st.container(key="card-ask-help"):
+            st.markdown('<p class="tl-section-title">How it works</p>', unsafe_allow_html=True)
+            components.show(
+                f"<div>{components.chip('🔧 search_cvs(query)', 'info')} searches every CV "
+                f"&nbsp; {components.chip('🔧 get_candidate(name)', 'info')} one candidate's profile "
+                f"&nbsp; {components.chip('🔧 list_candidates(band)', 'info')} everyone, with missing details</div>"
+            )
+            st.caption(f"The assistant calls up to 4 tools, then answers. Each tool call is shown, and every quote "
+                       f"is checked against the CV ({len(tools.candidates)} candidates available).")
 
     for turn in reversed(st.session_state.get("ask_history", [])):  # newest first
         with st.chat_message("user"):

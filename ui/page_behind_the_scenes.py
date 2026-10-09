@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import altair as alt
 import pandas as pd
 import streamlit as st
 
@@ -82,13 +83,32 @@ def agent_summary(run: RunResult) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def tokens_chart(table: pd.DataFrame) -> alt.LayerChart:
+    """Horizontal bars: total tokens per agent. One measure, one hue (the brand teal), labelled ends."""
+    data = table.assign(Tokens=table["Tokens in"] + table["Tokens out"])
+    base = alt.Chart(data).encode(
+        y=alt.Y("Agent:N", sort="-x", title=None, axis=alt.Axis(labelFontSize=13, labelColor="#1B2430", ticks=False, domain=False)),
+        x=alt.X("Tokens:Q", title=None, axis=alt.Axis(grid=True, gridColor="#EEF1F3", labelColor="#4A5563",
+                                                       tickCount=4, domain=False, ticks=False, format="~s")),
+    )
+    bars = base.mark_bar(color="#0E7C7B", cornerRadiusEnd=4, height=18).encode(
+        tooltip=[alt.Tooltip("Agent:N"), alt.Tooltip("Calls:Q"), alt.Tooltip("Tokens in:Q", format=","),
+                 alt.Tooltip("Tokens out:Q", format=","), alt.Tooltip("Tokens:Q", title="Total tokens", format=",")]
+    )
+    labels = base.mark_text(align="left", dx=6, color="#4A5563", fontSize=12).encode(text=alt.Text("Tokens:Q", format=","))
+    return (bars + labels).properties(height=46 * len(data) + 10).configure_view(stroke=None)
+
+
 def show_agent_summary(run: RunResult) -> None:
     table = agent_summary(run)
     if table.empty:
         st.info("No AI steps in this run yet.")
         return
+    st.markdown('<p class="tl-section-title">Tokens per agent</p>', unsafe_allow_html=True)
+    st.altair_chart(tokens_chart(table), width="stretch")
     st.dataframe(table, hide_index=True, width="stretch")
-    st.caption("Cached steps take almost no time and use no tokens: the answer was re-used from the database.")
+    st.caption("Tokens are what each call used when it first ran. Cached steps re-use the saved answer: "
+               "no new tokens, almost no time.")
 
 
 # ===========================================================================
@@ -173,13 +193,16 @@ def show_audit(memory: Memory, run: RunResult | None) -> None:
 
 
 def render(settings: Settings, memory: Memory) -> None:
-    st.header("6. Behind the scenes")
-    st.markdown("See exactly what the agents did, the prompts they used, how accurate they are, and every human action.")
+    components.page_header(
+        "Step 6 of 6 · Observability",
+        "Behind the scenes",
+        "See exactly what the agents did, the prompts they used, how accurate they are, and every human action.",
+    )
     run = state.current_run()
     tabs = st.tabs(["Agent trace", "Per-agent summary", "Prompts", "Evaluation", "Audit log"])
     with tabs[0]:
         if run is None or not run.trace:
-            st.info("No screening yet. The trace appears after you run the screening on page 3.")
+            st.info("No screening yet. The trace appears after you run the screening in step 3.")
         else:
             show_trace(run)
     with tabs[1]:

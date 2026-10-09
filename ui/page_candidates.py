@@ -79,7 +79,7 @@ def show_document(memory: Memory, document: dict, screened_ids: set[str]) -> Non
     if document["content_hash"][:12] in screened_ids:
         badges += " " + components.chip("✔ Screened", "met")
 
-    with st.container(border=True):
+    with st.container(key=f"card-cv-{document['id']}"):
         columns = st.columns([5, 1])
         with columns[0]:
             components.show(f'<div class="tl-card-title">{components.safe(document["file_name"])}</div>{badges}')
@@ -101,10 +101,11 @@ def show_document(memory: Memory, document: dict, screened_ids: set[str]) -> Non
 
 
 def render(settings: Settings, memory: Memory) -> None:
-    st.header("2. Candidates")
-    st.markdown(
-        "Add the CVs to screen. Each CV is cleaned **before** any AI sees it: protected details "
-        "(age, marital status...) are redacted and hidden instructions are removed."
+    components.page_header(
+        "Step 2 of 6 · Safe intake",
+        "Candidates",
+        "Add the CVs to screen. Each CV is cleaned <b>before</b> any AI sees it: protected details "
+        "(age, marital status…) are redacted and hidden instructions are removed.",
     )
     show_upload_area(memory)
 
