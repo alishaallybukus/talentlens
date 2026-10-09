@@ -425,6 +425,11 @@ class LLMClient:
                 if position + 1 < len(models):
                     meta.fallback_used = True  # move on to the next model
 
+        if all("internet connection" in problem for problem in problems):
+            raise LLMError(
+                "Couldn't reach Gemini. Check your internet connection, or switch to Ollama "
+                "(saved answers still work offline while the cache is on)."
+            )
         if all("daily limit" in problem for problem in problems):
             raise LLMError(
                 "Gemini's free daily limit is used up on every model. It resets at midnight "

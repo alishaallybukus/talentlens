@@ -227,7 +227,7 @@ Return a JSON object matching this schema:
 
 REPORT_SHORTLIST = PromptTemplate(
     name="report_shortlist",
-    version="report_shortlist@v1",
+    version="report_shortlist@v2",
     temperature=0.3,
     system=(
         "You are the Report Agent in TalentLens, a recruitment assistant. "
@@ -246,6 +246,7 @@ Task: write the shortlist overview.
 - overview: 3 to 5 neutral sentences comparing the shortlisted candidates.
 - points_to_discuss: up to 5 short bullet points for the hiring manager (e.g. missing information to collect, areas to probe).
 - Use only the data given. Add no new facts. These candidates were shortlisted by the recruiter, not by you.
+- Missing information: mention it only for the candidate whose missing_information list contains it, by name. If a candidate's list is empty, nothing is missing for them.
 
 Return a JSON object matching this schema:
 <<schema>>""",

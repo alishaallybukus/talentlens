@@ -137,3 +137,8 @@ table.tl-matrix td:first-child, table.tl-matrix th:first-child { text-align: lef
   background: var(--tl-missing-bg); color: var(--tl-missing); border-radius: 8px;
   padding: 10px 14px; margin: 6px 0; font-family: monospace; font-size: 0.88rem; white-space: pre-wrap;
 }
+
+/* --- Logo ----------------------------------------------------------------- */
+.tl-logo-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.tl-logo-row .tl-logo { margin: 0; line-height: 1.2; }
+.tl-logo-row .tl-tagline { margin: 0; }

@@ -213,7 +213,8 @@ def render(settings: Settings, memory: Memory) -> None:
     new_clicked = columns[1].button(
         "Screen new CVs",
         disabled=bool(blockers) or not is_current_run,
-        help="Adds CVs uploaded after the last run to the same ranking",
+        help="Adds CVs uploaded after the last run to the same ranking" if is_current_run
+        else "Run screening first: new CVs join an existing run",
     )
     for reason in blockers:
         columns[2].caption(reason)

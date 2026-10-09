@@ -143,7 +143,7 @@ def show_new_screening(memory: Memory) -> None:
 
 def show_sidebar(settings: Settings, memory: Memory) -> None:
     with st.sidebar:
-        components.show(f'<p class="tl-logo">🔍 {APP_NAME}</p><p class="tl-tagline">{TAGLINE}</p>')
+        components.show(components.logo_html(APP_NAME, TAGLINE))
         show_navigation(memory)
         st.divider()
         st.text_input("Reviewer name", key="reviewer", help="Recorded with every approval and decision.")

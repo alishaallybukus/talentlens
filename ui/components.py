@@ -203,3 +203,25 @@ def html_table(headers: list[str], rows: list[list[str]], css_class: str = "tl-t
     head = "".join(f"<th>{header}</th>" for header in headers)
     body = "".join("<tr>" + "".join(f"<td>{cell}</td>" for cell in row) + "</tr>" for row in rows)
     return f'<div class="tl-table-wrap"><table class="{css_class}"><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table></div>'
+
+
+# --- Logo -------------------------------------------------------------------------
+
+
+def logo_html(app_name: str, tagline: str) -> str:
+    """The TalentLens logo: a teal lens over a document, with the name and tagline."""
+    svg = (
+        '<svg width="40" height="40" viewBox="0 0 40 40" role="img" aria-label="TalentLens logo">'
+        '<rect x="4" y="3" width="22" height="28" rx="3" fill="#E6F3F2" stroke="#0A5E5D" stroke-width="2"/>'
+        '<line x1="9" y1="10" x2="21" y2="10" stroke="#0A5E5D" stroke-width="2" stroke-linecap="round"/>'
+        '<line x1="9" y1="15" x2="18" y2="15" stroke="#0A5E5D" stroke-width="2" stroke-linecap="round"/>'
+        '<circle cx="24" cy="23" r="8" fill="#FFFFFF" stroke="#0E7C7B" stroke-width="3"/>'
+        '<path d="M20.5 23.2l2.4 2.4 4.6-4.8" fill="none" stroke="#1E7F4F" stroke-width="2.2" '
+        'stroke-linecap="round" stroke-linejoin="round"/>'
+        '<line x1="30" y1="29" x2="36" y2="35" stroke="#0E7C7B" stroke-width="3.5" stroke-linecap="round"/>'
+        "</svg>"
+    )
+    return (
+        f'<div class="tl-logo-row">{svg}<div><p class="tl-logo">{safe(app_name)}</p>'
+        f'<p class="tl-tagline">{safe(tagline)}</p></div></div>'
+    )
