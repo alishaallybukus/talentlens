@@ -242,3 +242,23 @@ def test_deployed_app_hides_ollama(tmp_path, monkeypatch) -> None:
     app = AppTest.from_file(APP_FILE, default_timeout=APP_TIMEOUT)
     app.run()
     assert list(app.radio(key="provider").options) == ["Gemini"]  # Ollama is hidden
+
+
+def test_extras_work_in_the_app(tmp_path, monkeypatch) -> None:
+    """Excel download, Kevin's email draft, and Ask the CVs, with the fake model."""
+    app = screened_app(tmp_path, monkeypatch)
+    go_to(app, "review")
+    assert any(button.label == "Download Excel" for button in app.get("download_button"))
+    cid = candidate_id(app, "Kevin")
+    app.selectbox(key="selected_candidate").set_value(cid).run()
+    app.button(key=f"draft_email_{cid}").click().run()
+    assert no_errors(app)
+    assert "salary expectation" in app.text_area(key=f"email_body_{cid}").value
+    app.button(key=f"approve_email_{cid}").click().run()
+    assert no_errors(app)
+
+    go_to(app, "ask")
+    assert no_errors(app)
+    click(app, "Who has TikTok experience?")
+    assert no_errors(app)
+    assert "Quote verified" in all_text(app)

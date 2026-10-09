@@ -151,6 +151,31 @@ class ShortlistOverview(SchemaModel):
     points_to_discuss: list[str] = Field(default_factory=list)
 
 
+class Citation(SchemaModel):
+    """A quote from a CV that supports an answer. Verified by code against that CV."""
+
+    candidate: str
+    quote: str
+    verified: bool | None = None  # set by code
+
+
+class EmailDraft(SchemaModel):
+    """A polite email asking a candidate for missing details (extra, FR-X6). Never sent automatically."""
+
+    subject: str
+    body: str
+
+
+class AssistantStep(SchemaModel):
+    """One step of the Ask-the-CVs assistant (extra, FR-X1): call a tool, or give the final answer."""
+
+    action: Literal["call_tool", "answer"]
+    tool: str | None = None
+    arguments: dict = Field(default_factory=dict)
+    answer: str | None = None
+    citations: list[Citation] = Field(default_factory=list)
+
+
 # ---------------------------------------------------------------------------
 # Code-made results (no AI)
 # ---------------------------------------------------------------------------

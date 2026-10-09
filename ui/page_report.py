@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import re
 
+import requests
 import streamlit as st
 
 from core.agents import run_shortlist_overview
@@ -95,7 +96,7 @@ def file_stem(title: str) -> str:
     return f"shortlist_{words or 'report'}"
 
 
-def show_downloads(memory: Memory, run: RunResult) -> None:
+def show_downloads(settings: Settings, memory: Memory, run: RunResult) -> None:
     saved = memory.get_report(run.run_id)
     if not saved or not saved["approved_at"]:
         st.caption("Downloads appear after you approve the report.")
@@ -115,6 +116,31 @@ def show_downloads(memory: Memory, run: RunResult) -> None:
         mime="text/html",
     )
     columns[2].caption("Open the HTML file in your browser and print it to save a PDF.")
+    if settings.n8n_webhook_url:
+        if st.button("Send to hiring manager (n8n)"):
+            send_to_n8n(settings, memory, run, saved)
+
+
+def send_to_n8n(settings: Settings, memory: Memory, run: RunResult, saved: dict) -> None:
+    """FR-X2: post the approved report to the n8n webhook, which emails the hiring manager."""
+    payload = {
+        "subject": f"Shortlist: {run.requirements.title}",
+        "job_title": run.requirements.title,
+        "report_markdown": saved["final_md"],
+        "report_html": markdown_to_html_page(saved["final_md"], f"Shortlist: {run.requirements.title}"),
+        "approved_by": saved["approved_by"],
+        "approved_at": saved["approved_at"],
+    }
+    try:
+        response = requests.post(settings.n8n_webhook_url, json=payload, timeout=30)
+    except requests.RequestException:
+        st.error("Couldn't reach n8n. Is n8n running, and is the workflow active?")
+        return
+    if response.status_code >= 400:
+        st.error(f"n8n answered with an error ({response.status_code}). Check the workflow in n8n.")
+        return
+    memory.add_audit(state.reviewer_name(), "report_sent_n8n", "Sent to the hiring manager via n8n", run.run_id)
+    st.success(f"Sent to n8n ({response.status_code}). The hiring manager's email is on its way.")
 
 
 def show_editor(memory: Memory, run: RunResult) -> None:
@@ -158,4 +184,4 @@ def render(settings: Settings, memory: Memory) -> None:
         st.info("Click **Draft report** to start.")
         return
     show_editor(memory, run)
-    show_downloads(memory, run)
+    show_downloads(settings, memory, run)

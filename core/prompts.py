@@ -252,7 +252,85 @@ Return a JSON object matching this schema:
 <<schema>>""",
 )
 
-ALL_PROMPTS: list[PromptTemplate] = [JOB_ANALYST, CV_ANALYST, COMPARISON, REPORT_CANDIDATE, REPORT_SHORTLIST]
+# ===========================================================================
+# Report Agent, email mode (extra, FR-X6)
+# ===========================================================================
+
+EMAIL = PromptTemplate(
+    name="email",
+    version="email@v1",
+    temperature=0.3,
+    system=(
+        "You are the Report Agent in TalentLens, a recruitment assistant. "
+        "You draft short, polite emails from a recruiter to a candidate.\n\n" + SHARED_RULES
+    ),
+    user="""<job_title>
+<<job_title>>
+</job_title>
+
+<candidate_name>
+<<name>>
+</candidate_name>
+
+<missing_information>
+<<missing>>
+</missing_information>
+
+Task: draft an email from the recruiter (<<reviewer>>) at <<company>> to this candidate about their application.
+- Thank them for applying, then ask for EXACTLY the items in <missing_information>, as a short bulleted list. Ask for nothing else.
+- Do not mention scores, rankings, other candidates or any decision. Do not promise an interview.
+- Friendly and professional, under 150 words. Sign off with the recruiter's name.
+- subject: short, e.g. "Your application for Marketing Executive: a few details".
+
+Return a JSON object matching this schema:
+<<schema>>""",
+)
+
+# ===========================================================================
+# Ask-the-CVs assistant (extra, FR-X1, spec 5.8)
+# ===========================================================================
+
+ASSISTANT = PromptTemplate(
+    name="assistant",
+    version="assistant@v1",
+    temperature=0.1,
+    system=(
+        "You are the Ask-the-CVs assistant in TalentLens, a recruitment assistant. "
+        "You answer the recruiter's questions about the screened candidates, using tools to look things up.\n\n"
+        + SHARED_RULES
+        + """
+
+Tools you can call (one per step):
+- search_cvs(query): searches every CV and returns matching snippets with the candidate's name.
+- get_candidate(name): one candidate's profile and assessment summary.
+- list_candidates(band): every candidate with score and band. band is optional: "Strong match", "Possible match" or "Not a match for this role".
+
+Each step, return ONE of:
+{"action": "call_tool", "tool": "search_cvs", "arguments": {"query": "TikTok"}}
+{"action": "answer", "answer": "...", "citations": [{"candidate": "Name", "quote": "exact words from their CV"}]}
+
+Answer rules:
+- Base the answer ONLY on tool results. Quote CV text word for word in citations.
+- If the tools don't give the answer, say: "I couldn't find that in the CVs."
+- Never rank, shortlist or reject anyone; the recruiter decides. Never mention protected characteristics."""
+    ),
+    user="""<question>
+<<question>>
+</question>
+
+<tool_results>
+<<tool_results>>
+</tool_results>
+
+<<instruction>>
+
+Return a JSON object matching this schema:
+<<schema>>""",
+)
+
+ALL_PROMPTS: list[PromptTemplate] = [
+    JOB_ANALYST, CV_ANALYST, COMPARISON, REPORT_CANDIDATE, REPORT_SHORTLIST, EMAIL, ASSISTANT,
+]
 
 
 # ===========================================================================
@@ -265,6 +343,7 @@ PROMPT_TAGS: list[str] = [
     "cv", "guidelines", "job_requirements", "profile", "computed_years", "job_description",
     "recruiter_preferences", "assessment", "score", "missing_information", "flags",
     "previous_answer", "shortlisted_candidates", "job_title",
+    "candidate_name", "question", "tool_results",
 ]
 
 

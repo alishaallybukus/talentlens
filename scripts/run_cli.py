@@ -155,6 +155,8 @@ def main() -> int:
         documents = load_sample_cvs(arguments.limit)
         print(f"\n2. Screening {len(documents)} CVs...")
         run = create_run(requirements, llm.provider, llm.model)
+        for intake in documents:  # load them into the app's working area too, like "Use sample CVs"
+            memory.add_document(intake, kind="cv")
         run_screening(run, documents, llm, index, on_event=print_event, save_run=memory.save_run)
     except (LLMError, AgentError) as error:
         print(f"\nThe run stopped: {error}")

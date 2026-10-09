@@ -33,6 +33,7 @@ from core.schemas import (
     RequirementResult,
     ScoreBreakdown,
     ShortlistOverview,
+    EmailDraft,
 )
 
 # Fixed retrieval queries for each agent (spec section 5).
@@ -735,3 +736,34 @@ def run_shortlist_overview(llm, job_title: str, shortlisted: list[dict]) -> Agen
     overview.overview, removed = guardrails.filter_protected_sentences(overview.overview)
     overview.points_to_discuss, removed_points = guardrails.filter_protected_items(overview.points_to_discuss)
     return AgentStep(overview, meta, [])
+
+
+# ===========================================================================
+# Report Agent, email mode (extra, FR-X6)
+# ===========================================================================
+
+
+def run_missing_info_email(
+    llm, job_title: str, company: str, candidate_name: str, missing_items: list[str], reviewer: str
+) -> AgentStep:
+    """Draft a polite email asking for exactly the missing details. The recruiter edits and approves it.
+
+    Only the name, job and the missing items are sent: no CV text, scores or decisions.
+    """
+    template = prompts.EMAIL
+    prompt = prompts.fill(
+        template.user,
+        {
+            "job_title": prompts.neutralise_tags(job_title),
+            "name": prompts.neutralise_tags(candidate_name),
+            "missing": "\n".join(f"- {item}" for item in missing_items),
+            "reviewer": prompts.neutralise_tags(reviewer),
+            "company": prompts.neutralise_tags(company or "our company"),
+            "schema": prompts.schema_text(EmailDraft),
+        },
+    )
+    draft, meta = llm.generate_json("email", template.system, prompt, EmailDraft, template.temperature, template.version)
+    # The bias filter, line by line so the email keeps its paragraphs and bullets.
+    clean_lines = [guardrails.filter_protected_sentences(line)[0] if line.strip() else "" for line in draft.body.splitlines()]
+    draft.body = "\n".join(clean_lines)
+    return AgentStep(draft, meta, [])

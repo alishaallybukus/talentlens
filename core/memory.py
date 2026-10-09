@@ -385,6 +385,13 @@ class Memory:
             rows = connection.execute(query).mappings().all()
         return [self.row_to_document(row) for row in rows]
 
+    def cv_texts_by_hash(self) -> dict[str, str]:
+        """Every CV's cleaned text (active or not), keyed by its content hash. Used by Ask the CVs."""
+        query = select(documents_table.c.content_hash, documents_table.c.clean_text).where(documents_table.c.kind == "cv")
+        with self.engine.connect() as connection:
+            rows = connection.execute(query).all()
+        return {content_hash: clean_text for content_hash, clean_text in rows}
+
     def get_document(self, document_id: int) -> dict | None:
         with self.engine.connect() as connection:
             row = connection.execute(

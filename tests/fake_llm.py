@@ -121,6 +121,25 @@ def default_report_shortlist(prompt: str) -> dict:
     return {"overview": "Two strong candidates were shortlisted.", "points_to_discuss": ["Collect notice periods."]}
 
 
+def default_email(prompt: str) -> dict:
+    """Asks for exactly the items listed in <missing_information>."""
+    items = [line[2:] for line in text_between(prompt, "missing_information").splitlines() if line.startswith("- ")]
+    body = "Dear candidate,\n\nThank you for applying. Could you please send:\n" + "\n".join(f"- {item}" for item in items)
+    return {"subject": "Your application: a few details", "body": body + "\n\nKind regards,\nRecruiter"}
+
+
+def default_assistant(prompt: str) -> dict:
+    """First searches the CVs for the question, then answers quoting the first search hit."""
+    results = text_between(prompt, "tool_results")
+    if "returned:" not in results:
+        return {"action": "call_tool", "tool": "search_cvs", "arguments": {"query": text_between(prompt, "question")}}
+    hit = re.search(r'- (.+?): "(.+)"', results)
+    if hit is None:
+        return {"action": "answer", "answer": "I couldn't find that in the CVs.", "citations": []}
+    return {"action": "answer", "answer": f"{hit.group(1)} mentions it.",
+            "citations": [{"candidate": hit.group(1), "quote": hit.group(2)}]}
+
+
 def default_handlers() -> dict[str, Handler]:
     return {
         "job_analyst": default_job_analyst,
@@ -129,6 +148,8 @@ def default_handlers() -> dict[str, Handler]:
         "comparison_revision": default_comparison,
         "report_candidate": default_report_candidate,
         "report_shortlist": default_report_shortlist,
+        "email": default_email,
+        "assistant": default_assistant,
     }
 
 

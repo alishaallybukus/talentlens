@@ -13,7 +13,9 @@ from __future__ import annotations
 
 import streamlit as st
 
+from core.agents import run_missing_info_email
 from core.config import Settings
+from core.excel import build_workbook
 from core.guardrails import MISSING_INFO_NAMES
 from core.memory import ALLOWED_DECISIONS, DecisionError, Memory
 from core.report import candidate_name, decision_for, screened_candidates
@@ -313,6 +315,51 @@ def show_decision_panel(memory: Memory, run: RunResult, candidate: CandidateResu
 
 
 # ===========================================================================
+# Missing-information email draft (extra, FR-X6)
+# ===========================================================================
+
+
+def draft_email(settings: Settings, memory: Memory, run: RunResult, candidate: CandidateResult) -> None:
+    llm = state.make_llm(settings, memory)
+    missing = [MISSING_INFO_NAMES.get(key, key) for key in candidate.missing_info]
+    try:
+        with st.spinner("The Report Agent is drafting the email..."):
+            step = run_missing_info_email(llm, run.requirements.title, run.requirements.company or "",
+                                          candidate_name(candidate), missing, state.reviewer_name())
+    except Exception as error:  # never a raw error
+        st.error(state.friendly_error(error))
+        return
+    # Allowed: the subject and body boxes are drawn after this button.
+    st.session_state[f"email_subject_{candidate.candidate_id}"] = step.result.subject
+    st.session_state[f"email_body_{candidate.candidate_id}"] = step.result.body
+
+
+def approve_email(memory: Memory, run: RunResult, candidate: CandidateResult) -> None:
+    subject = st.session_state.get(f"email_subject_{candidate.candidate_id}", "")
+    memory.add_audit(state.reviewer_name(), "email_approved", f"{candidate_name(candidate)}: {subject}", run.run_id)
+    st.toast("Email approved and logged. Copy it into your email app to send it.")
+
+
+def show_email_draft(settings: Settings, memory: Memory, run: RunResult, candidate: CandidateResult) -> None:
+    if not candidate.missing_info:
+        return
+    cid = candidate.candidate_id
+    with st.container(border=True):
+        st.markdown("#### Ask for the missing details")
+        st.caption("Drafts an email asking for exactly what's missing. It is never sent automatically.")
+        if st.button("Draft email", key=f"draft_email_{cid}"):
+            draft_email(settings, memory, run, candidate)
+        if f"email_body_{cid}" not in st.session_state:
+            return
+        st.text_input("Subject", key=f"email_subject_{cid}")
+        st.text_area("Email", key=f"email_body_{cid}", height=220)
+        with st.expander("Copy"):
+            st.code(st.session_state[f"email_subject_{cid}"] + "\n\n" + st.session_state[f"email_body_{cid}"],
+                    language=None, wrap_lines=True)
+        st.button("Approve email", key=f"approve_email_{cid}", on_click=approve_email, args=(memory, run, candidate))
+
+
+# ===========================================================================
 # Reset decisions (FR-D5)
 # ===========================================================================
 
@@ -361,6 +408,9 @@ def render(settings: Settings, memory: Memory) -> None:
         st.warning(f"{len(failed)} CV(s) couldn't be screened. Retry them on page 3.")
 
     show_summary(candidates, decisions)
+    st.download_button("Download Excel", build_workbook(run, decisions), file_name="talentlens_screening.xlsx",
+                       mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                       help="Ranking, comparison matrix and evidence, one sheet each")
     show_ranked_cards(candidates, decisions)
     show_matrix(run, candidates)
 
@@ -377,5 +427,6 @@ def render(settings: Settings, memory: Memory) -> None:
         show_detail(run, selected)
     with columns[1]:
         show_decision_panel(memory, run, selected, decisions)
+        show_email_draft(settings, memory, run, selected)
         st.divider()
         show_reset_decisions(memory, run)

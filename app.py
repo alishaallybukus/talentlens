@@ -18,6 +18,7 @@ from core.memory import Memory
 from core.report import count_decisions
 from ui import (
     components,
+    page_ask,
     page_behind_the_scenes,
     page_candidates,
     page_job_setup,
@@ -38,6 +39,7 @@ PAGES: list[tuple[str, str]] = [
     ("review", "4 Review"),
     ("report", "5 Shortlist report"),
     ("behind", "6 Behind the scenes"),
+    ("ask", "💬 Ask the CVs"),
 ]
 
 
@@ -167,6 +169,7 @@ PAGE_RENDERERS = {
     "review": page_review.render,
     "report": page_report.render,
     "behind": page_behind_the_scenes.render,
+    "ask": page_ask.render,
 }
 
 
