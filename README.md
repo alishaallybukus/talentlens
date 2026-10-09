@@ -62,7 +62,7 @@ Details, data flow and key decisions: [`docs/architecture.md`](docs/architecture
 
 ## Run it locally (Windows PowerShell)
 
-Needs Python 3.11 or 3.12. Optional: [Ollama](https://ollama.com) with `ollama pull qwen2.5:7b` for the local model.
+Needs Python 3.11 or 3.12, and either a free Gemini API key or Ollama (see below).
 
 ```
 git clone https://github.com/alishaallybukus/talentlens.git
@@ -76,7 +76,17 @@ streamlit run app.py
 
 If PowerShell blocks activation, run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once.
 
-In the app: **1 Job setup** → load the sample job → **Extract requirements** → **Approve**. **2 Candidates** → **Use sample CVs**. **3 Screening** → **Run screening**. Then review, decide and draft the report.
+### Run it with Ollama (local model, no API key needed)
+
+1. Install [Ollama](https://ollama.com/download), open it, then in PowerShell run `ollama pull qwen2.5:7b` (about 4.7 GB, once).
+2. In `.env`, set `LLM_PROVIDER=ollama` (leave `GEMINI_API_KEY` empty).
+3. `streamlit run app.py`, then check **⚙ Settings** shows *Ollama (local)* and click **Test connection**.
+
+Expect about 40 seconds per CV on a laptop CPU. The online demo uses Gemini, because a cloud server can't reach a model running on someone's laptop.
+
+### Using the app
+
+**Job setup** → load the sample job → **Extract requirements** → **Approve requirements**. **Candidates** → **Use sample CVs**. **Screening** → **Run screening**. Then **Review** (decide for each candidate), **Report** (draft, approve, download) and **Behind the scenes**.
 
 Other commands:
 
