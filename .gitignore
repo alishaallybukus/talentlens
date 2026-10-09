@@ -9,6 +9,9 @@
 data/cache/
 data/*.db
 
+# Private notes from the original project folder
+notes/
+
 # Python and pytest leftovers
 __pycache__/
 .pytest_cache/
