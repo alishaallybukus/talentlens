@@ -435,6 +435,31 @@ class LLMClient:
             "Wait about a minute, then try again."
         )
 
+    # --- Test connection (FR-L2) -------------------------------------------
+
+    def test_connection(self) -> tuple[bool, str]:
+        """Send one tiny request to the chosen model (no cache, no retries).
+
+        Returns (worked, plain-English message), e.g. (True, "Gemini responded in 1.2 s").
+        """
+        provider_name = "Gemini" if self.provider == "gemini" else "Ollama"
+        schema = {"type": "object", "properties": {"status": {"type": "string"}}, "required": ["status"]}
+        started = time.perf_counter()
+        try:
+            reply = self.send(self.model, "Reply only with JSON.", 'Reply with {"status": "ok"}', schema, 0.0)
+        except LLMError as error:
+            return False, str(error)
+        except ModelUnavailableError as error:
+            return False, f"{provider_name}: {error}. Try another model."
+        except RetryableError as error:
+            return False, f"{error} Wait a minute and try again, or pick another model."
+        seconds = time.perf_counter() - started
+        try:
+            extract_json_text(reply.text)
+        except ValueError:
+            return False, f"{provider_name} answered in {seconds:.1f} s, but not with JSON. Try another model."
+        return True, f"{provider_name} ({self.model}) responded in {seconds:.1f} s"
+
     # --- the main function -------------------------------------------------
 
     def generate_json(

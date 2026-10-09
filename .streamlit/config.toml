@@ -1,0 +1,15 @@
+# Streamlit settings for TalentLens: the colour theme (spec 12.3) and server options.
+
+[theme]
+base = "light"
+primaryColor = "#0E7C7B"              # teal: buttons, links, active step
+backgroundColor = "#F6F7F5"           # page background
+secondaryBackgroundColor = "#FFFFFF"  # sidebar and input backgrounds
+textColor = "#1B2430"
+font = "sans serif"
+
+[server]
+maxUploadSize = 20  # MB per file; CVs are small
+
+[browser]
+gatherUsageStats = false

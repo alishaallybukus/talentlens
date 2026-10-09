@@ -11,5 +11,9 @@ python-docx==1.2.0
 # The sha256 checksum makes pip refuse the file if it was ever altered.
 SQLAlchemy @ https://files.pythonhosted.org/packages/f7/62/dbf11a262f6fbb41390cab2d8e47a30ec0961018b68201607b599dd489f5/sqlalchemy-2.1.4-py3-none-any.whl#sha256=0b96edcc2cd60fe1e35f67a46f4eb076e57297841b9eae949ac5f196593f00a7
 pytest==9.1.1
+# Pinned to slightly older releases: Windows Smart App Control blocks the compiled
+# files of the newest pandas (3.0.6) and rpds-py (2026.9.1) on the development laptop.
+pandas==2.3.3
+rpds-py==0.27.1
 # Only used by scripts/generate_sample_data.py
 reportlab==5.0.1

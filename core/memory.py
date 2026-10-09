@@ -203,6 +203,18 @@ class Memory:
         with self.engine.begin() as connection:
             self.write_audit(connection, actor, event, detail, run_id)
 
+    def latest_event_time(self, event: str) -> str | None:
+        """When an audit event last happened (e.g. "new_screening"), or None if never."""
+        query = (
+            select(audit_table.c.ts)
+            .where(audit_table.c.event == event)
+            .order_by(audit_table.c.id.desc())
+            .limit(1)
+        )
+        with self.engine.connect() as connection:
+            row = connection.execute(query).first()
+        return row[0] if row else None
+
     def list_audit(self, run_id: str | None = None, limit: int = 200) -> list[dict]:
         """The newest audit rows first. Give a run_id to see only that run."""
         query = select(audit_table).order_by(audit_table.c.id.desc()).limit(limit)
@@ -290,6 +302,13 @@ class Memory:
             row = connection.execute(select(jobs_table).where(jobs_table.c.title == title)).mappings().first()
         return self.row_to_job(row) if row else None
 
+    def get_latest_job(self) -> dict | None:
+        """The most recently approved job (reloaded when the app starts)."""
+        query = select(jobs_table).order_by(jobs_table.c.approved_at.desc()).limit(1)
+        with self.engine.connect() as connection:
+            row = connection.execute(query).mappings().first()
+        return self.row_to_job(row) if row else None
+
     def list_jobs(self) -> list[dict]:
         query = select(jobs_table.c.id, jobs_table.c.title, jobs_table.c.approved_by, jobs_table.c.approved_at)
         with self.engine.connect() as connection:
@@ -362,10 +381,25 @@ class Memory:
         with self.engine.begin() as connection:
             connection.execute(delete(documents_table).where(documents_table.c.id == document_id))
 
-    def clear_working_documents(self) -> None:
-        """For "New screening": take every document out of the working area, keeping history."""
+    def clear_working_documents(self, kind: str | None = None) -> None:
+        """Take documents out of the working area, keeping them as history.
+
+        With no kind, every document is cleared (for "New screening").
+        """
+        statement = update(documents_table).values(active=False)
+        if kind is not None:
+            statement = statement.where(documents_table.c.kind == kind)
         with self.engine.begin() as connection:
-            connection.execute(update(documents_table).values(active=False))
+            connection.execute(statement)
+
+    def start_new_screening(self, actor: str) -> None:
+        """FR-M5: clear the working area but keep preferences, jobs and past runs.
+
+        The audit row's time marks the start of the new working area, so on restart
+        the app only reloads jobs and runs created after it.
+        """
+        self.clear_working_documents()
+        self.add_audit(actor, "new_screening", "Working area cleared")
 
     # -----------------------------------------------------------------------
     # Runs (FR-S4, FR-M2, FR-M3)
