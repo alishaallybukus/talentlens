@@ -26,6 +26,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from core.config import Settings, get_settings  # noqa: E402  (import after the path fix)
+from core.llm import post_with_deadline  # noqa: E402
 
 GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 GEMINI_TIMEOUT_SECONDS = 120
@@ -116,11 +117,8 @@ def check_gemini_model(model: str, api_key: str) -> CheckResult:
 
     started = time.perf_counter()
     try:
-        response = requests.post(
-            GEMINI_URL.format(model=model),
-            headers=headers,
-            json=body,
-            timeout=GEMINI_TIMEOUT_SECONDS,
+        response = post_with_deadline(
+            GEMINI_URL.format(model=model), GEMINI_TIMEOUT_SECONDS, headers=headers, json=body
         )
     except requests.Timeout:
         seconds = time.perf_counter() - started
@@ -158,7 +156,7 @@ def check_ollama_model(base_url: str, model: str) -> CheckResult:
 
     started = time.perf_counter()
     try:
-        response = requests.post(f"{base_url}/api/chat", json=body, timeout=OLLAMA_TIMEOUT_SECONDS)
+        response = post_with_deadline(f"{base_url}/api/chat", OLLAMA_TIMEOUT_SECONDS, json=body)
     except requests.Timeout:
         seconds = time.perf_counter() - started
         return CheckResult(label, False, seconds, False, "Ollama didn't reply in time (timeout).")

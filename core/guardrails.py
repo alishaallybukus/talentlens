@@ -393,7 +393,7 @@ class MonthSpan:
     end: int
     is_marketing: bool
     is_break: bool
-    label: str
+    label: str  # the dates as written, e.g. "Jan 2023 - Dec 2024"
 
 
 def month_number(year: int, month: int) -> int:
@@ -451,7 +451,7 @@ def roles_to_spans(roles: list[Role], today: date) -> list[MonthSpan] | None:
         end = parse_month(role.end, today, is_end=True)
         if start is None or end is None or end < start:
             return None
-        label = f"{role.title} ({role.start} - {role.end})"
+        label = f"{role.start} - {role.end}"
         spans.append(MonthSpan(start, end, role.is_marketing_role, is_career_break(role), label))
     return spans
 
@@ -509,7 +509,7 @@ def find_career_gaps(roles: list[Role], today: date) -> list[str]:
     gaps: list[str] = []
     for span in spans:
         if span.is_break:
-            gaps.append(f"Career break: {span.label}")
+            gaps.append(f"Career break ({span.label})")
 
     # Look for empty time between periods. Career breaks count as covered time,
     # so the same gap isn't reported twice.
