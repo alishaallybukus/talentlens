@@ -131,6 +131,7 @@ def test_app_test_connection_with_ollama_stopped(app_with_stopped_ollama) -> Non
 
 def test_app_extract_requirements_with_ollama_stopped(app_with_stopped_ollama) -> None:
     app = app_with_stopped_ollama
+    app.button(key="nav_job_setup").click().run()
     click(app, "Load the sample job (Marketing Executive)")
     click(app, "Extract requirements")
     assert len(app.exception) == 0

@@ -15,7 +15,7 @@ TalentLens helps a recruiter screen CVs against a job's requirements and the com
 | ![Review page](docs/screenshots/review.png) | ![Trace](docs/screenshots/trace.png) |
 -->
 
-**Evaluation:** 7 of 7 demo CVs correct on Gemini and on a local Ollama model ([details](docs/testing.md)). **Tests:** 201 passing.
+**Evaluation:** 7 of 7 demo CVs correct on Gemini and on a local Ollama model ([details](docs/testing.md)). **Tests:** 208 passing.
 
 ## Features
 
@@ -28,6 +28,8 @@ TalentLens helps a recruiter screen CVs against a job's requirements and the com
 - **Shortlist report:** an AI overview plus code-built sections for shortlisted candidates only; edit, approve (checkpoint 3), download as Markdown or HTML.
 - **Behind the scenes:** the full agent trace (time, tokens, cache hits, retrieved clauses), per-agent summary, every prompt with its version, evaluation results and the audit log.
 - **Extras:** Excel export, missing-information email drafts (never sent automatically), **Ask the CVs** (a tool-calling assistant with verified quotes), and an n8n workflow that emails the approved report.
+- **Home dashboard and interface:** a landing page with the agent pipeline diagram, live numbers and charts; a live pipeline animation during screening; a decision board and side-by-side comparison on the Review page; light and dark mode.
+- **Two sample sets:** the Marketing Executive sample (with ground truth) and a Junior Software Developer test pack (including a prompt-injection CV).
 - **Works with Gemini or a local Ollama model**, with caching, retries, model fallback and friendly error messages. SQLite locally, Postgres (Neon) in the cloud.
 
 ## Architecture

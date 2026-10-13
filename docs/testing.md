@@ -1,14 +1,14 @@
 # Testing and evaluation
 
 TalentLens is tested in two ways:
-1. **Automated tests (pytest):** 201 tests that run offline in about 30 seconds, using a fake model (`tests/fake_llm.py`) that never calls a real API.
+1. **Automated tests (pytest):** 208 tests that run offline in about 30 seconds, using a fake model (`tests/fake_llm.py`) that never calls a real API.
 2. **Evaluation with real models (`eval/run_eval.py`):** the full pipeline on the 7 fictional demo CVs, compared with the expected results in `data/sample/ground_truth.json`.
 
 Every change made because of a test or evaluation result is in the [refinement log](refinement_log.md).
 
 ## 1. Automated tests
 
-Run with `pytest -v`. Full output: [`test_results.txt`](test_results.txt). **Result: 201 passed.**
+Run with `pytest -v`. Full output: [`test_results.txt`](test_results.txt). **Result: 208 passed.**
 
 | File | Tests | What it checks |
 |---|---|---|

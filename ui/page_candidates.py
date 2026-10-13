@@ -9,6 +9,8 @@ Why this file exists:
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import streamlit as st
 
 from core.config import Settings
@@ -40,9 +42,10 @@ def add_uploads(memory: Memory, uploads) -> None:
             st.warning(message)
 
 
-def add_sample_cvs(memory: Memory) -> None:
+def add_sample_cvs(memory: Memory, folder: Path | None = None) -> None:
+    """Load every CV in a sample folder (the Marketing sample by default)."""
     added_count = 0
-    for path in sorted(state.SAMPLE_CV_DIR.iterdir()):
+    for path in sorted((folder or state.SAMPLE_CV_DIR).iterdir()):
         added, message = add_cv(memory, path.name, path.read_bytes())
         if added:
             added_count += 1
@@ -65,9 +68,12 @@ def show_upload_area(memory: Memory) -> None:
             st.rerun()
     with columns[1]:
         st.write("")
-        st.write("")
-        if st.button("Use sample CVs", help="Loads the 6 fictional sample CVs"):
+        if st.button("Use sample CVs", help="Loads the 6 fictional sample CVs (Marketing Executive)", width="stretch"):
             add_sample_cvs(memory)
+            st.rerun()
+        if st.button("Use test pack CVs", help="Loads the 6 fictional test CVs (Junior Software Developer)",
+                     width="stretch"):
+            add_sample_cvs(memory, state.TEST_PACK_CV_DIR)
             st.rerun()
 
 
@@ -93,8 +99,11 @@ def show_document(memory: Memory, document: dict, screened_ids: set[str]) -> Non
             st.caption("Redacted before analysis (labels only): " + ", ".join(redactions))
         if quarantined:
             st.warning(
-                "**Suspicious text removed.** This line looked like an instruction to an AI tool. "
-                "It was removed before analysis (Guidelines §8.3):\n\n> " + "\n> ".join(quarantined)
+                ("**Suspicious text removed.** This line looked like an instruction to an AI tool. "
+                 "It was removed before analysis (Guidelines §8.3):" if len(quarantined) == 1 else
+                 f"**Suspicious text removed.** These {len(quarantined)} lines looked like instructions to an AI tool. "
+                 "They were removed before analysis (Guidelines §8.3):")
+                + "\n\n> " + "\n> ".join(quarantined)
             )
         with st.expander("What the AI will see"):
             st.text(document["clean_text"])

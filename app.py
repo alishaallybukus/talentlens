@@ -2,10 +2,11 @@
 
 Start it with:  streamlit run app.py
 
-This file sets up the page and the top bar: the logo, a step indicator for the
-six steps (with ✓ on finished steps), and pop-out panels for Settings (reviewer
-name, model, cache, New screening) and Memory (recruiter preferences). Then it
-shows the chosen page, with Back / Next buttons underneath.
+This file sets up the page and the top bar: the logo, Home and a step indicator
+for the six steps (with ✓ on finished steps), pop-out panels for Settings
+(reviewer name, model, cache, New screening) and Memory (recruiter preferences),
+and the light / dark switch. Then it shows the chosen page, with Back / Next
+buttons underneath.
 Each page lives in its own file in the ui/ folder.
 """
 
@@ -17,63 +18,33 @@ import streamlit as st
 
 from core.config import Settings, get_settings
 from core.memory import Memory
-from core.report import count_decisions
 from ui import (
     components,
+    nav,
     page_ask,
     page_behind_the_scenes,
     page_candidates,
+    page_home,
     page_job_setup,
     page_report,
     page_review,
     page_screening,
     state,
+    theme,
 )
 
 APP_NAME = "TalentLens"
 TAGLINE = "AI does the reading. You make the call."
 
-# The six steps of the flow, in order: (page key, label in the step indicator).
-STEPS: list[tuple[str, str]] = [
-    ("job_setup", "Job setup"),
-    ("candidates", "Candidates"),
-    ("screening", "Screening"),
-    ("review", "Review"),
-    ("report", "Report"),
-    ("behind", "Behind the scenes"),
-]
-STEP_KEYS = [key for key, _label in STEPS]
+STEPS = nav.STEPS
+STEP_KEYS = nav.STEP_KEYS
 CIRCLED_NUMBERS = ["①", "②", "③", "④", "⑤", "⑥"]
+go_to = nav.go_to
 
 
 # ===========================================================================
 # Step indicator
 # ===========================================================================
-
-
-def step_is_done(page_key: str, memory: Memory) -> bool:
-    """Which steps get a ✓ in the step indicator."""
-    run = state.current_run()
-    if page_key == "job_setup":
-        return state.approved_requirements() is not None
-    if page_key == "candidates":
-        return len(memory.list_documents(kind="cv")) > 0
-    if page_key == "screening":
-        return run is not None and any(c.error is None for c in run.candidates)
-    if run is None:
-        return False
-    if page_key == "review":  # every screened candidate has a decision
-        counts = count_decisions(run, memory.get_decisions(run.run_id))
-        return sum(counts.values()) > 0 and counts["Pending"] == 0
-    if page_key == "report":
-        report = memory.get_report(run.run_id)
-        return report is not None and report["approved_at"] is not None
-    return False
-
-
-def go_to(page_key: str) -> None:
-    """Button callback: open a page."""
-    st.session_state["page"] = page_key
 
 
 def step_styles(done_keys: list[str]) -> str:
@@ -84,18 +55,19 @@ def step_styles(done_keys: list[str]) -> str:
     ]
     rules.append(
         f".st-key-tl-stepper .st-key-nav_{current} button, .st-key-tl-stepper .st-key-nav_{current} button:hover "
-        f"{{ background: var(--tl-primary) !important; color: #FFFFFF !important; "
+        f"{{ background: var(--tl-primary) !important; color: var(--tl-on-primary) !important; "
         f"box-shadow: 0 2px 8px rgba(14,124,123,0.3) !important; }}"
     )
     return "<style>" + "\n".join(rules) + "</style>"
 
 
 def show_stepper(memory: Memory) -> None:
-    done_keys = [key for key in STEP_KEYS if step_is_done(key, memory)]
+    done_keys = nav.done_steps(memory)
     components.show(step_styles(done_keys))
     with st.container(key="tl-stepper"):
-        columns = st.columns(len(STEPS), gap="small")
-        for position, (column, (page_key, label)) in enumerate(zip(columns, STEPS)):
+        columns = st.columns([0.75, 1, 1.05, 1, 0.9, 0.9, 1.5], gap="small")
+        columns[0].button("⌂ Home", key="nav_home", width="stretch", on_click=go_to, args=("home",))
+        for position, (column, (page_key, label)) in enumerate(zip(columns[1:], STEPS)):
             marker = "✓" if page_key in done_keys else CIRCLED_NUMBERS[position]
             column.button(f"{marker} {label}", key=f"nav_{page_key}", width="stretch",
                           on_click=go_to, args=(page_key,))
@@ -200,7 +172,7 @@ def show_new_screening(memory: Memory) -> None:
 def show_topbar(settings: Settings, memory: Memory) -> None:
     """Row 1: logo and actions (Ask, Memory, Settings). Row 2: the step indicator, full width."""
     with st.container(key="tl-topbar"):
-        top = st.columns([4.6, 1.45, 1.2, 1.6], vertical_alignment="center", gap="small")
+        top = st.columns([4.3, 1.45, 1.2, 1.6, 0.45], vertical_alignment="center", gap="small")
         with top[0]:
             components.show(components.logo_html(APP_NAME, TAGLINE))
         with top[1], st.container(key="tl-actions-ask"):
@@ -211,6 +183,10 @@ def show_topbar(settings: Settings, memory: Memory) -> None:
             show_preferences(memory)
         with top[3], st.container(key="tl-actions-settings"):
             show_settings(settings, memory)
+        with top[4]:
+            dark = theme.is_dark()
+            st.button("☀️" if dark else "🌙", key="theme_toggle", width="stretch", on_click=theme.request_toggle,
+                      help="Switch to light mode" if dark else "Switch to dark mode")
         show_stepper(memory)
 
 
@@ -220,6 +196,7 @@ def show_topbar(settings: Settings, memory: Memory) -> None:
 
 
 PAGE_RENDERERS = {
+    "home": page_home.render,
     "job_setup": page_job_setup.render,
     "candidates": page_candidates.render,
     "screening": page_screening.render,
@@ -276,6 +253,7 @@ def access_granted(settings: Settings) -> bool:
 
 def main() -> None:
     st.set_page_config(page_title=APP_NAME, page_icon="🔍", layout="wide", initial_sidebar_state="collapsed")
+    theme.sync()  # a theme switch redraws the page in the new colours
     components.load_styles()
     settings = get_settings()
     if not access_granted(settings):

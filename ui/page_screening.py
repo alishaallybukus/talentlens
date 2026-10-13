@@ -103,6 +103,11 @@ def timeline_html(trace: list[TraceEvent]) -> str:
 # ===========================================================================
 
 
+def short_number(value: int) -> str:
+    """12345 -> '12.3k', so big numbers fit in a tile."""
+    return f"{value / 1000:.1f}k" if value >= 1000 else str(value)
+
+
 def show_statistics(run: RunResult) -> None:
     """Five headline numbers, then the reliability counters as a quiet row of chips (FR-S6)."""
     stats = run.stats
@@ -112,7 +117,7 @@ def show_statistics(run: RunResult) -> None:
             ("Candidates", stats.get("candidates", 0), "primary"),
             ("AI calls", stats.get("ai_calls", 0), ""),
             ("Cache hits", stats.get("cache_hits", 0), ""),
-            ("Tokens in / out", f"{stats.get('tokens_in', 0):,} / {stats.get('tokens_out', 0):,}", ""),
+            ("Tokens in / out", f"{short_number(stats.get('tokens_in', 0))} / {short_number(stats.get('tokens_out', 0))}", ""),
             ("Total time", f"{minutes}m {seconds:02d}s", ""),
         ]
     )
@@ -140,6 +145,41 @@ def run_needs_new(run: RunResult | None, requirements) -> bool:
     return run is None or run.requirements.model_dump() != requirements.model_dump()
 
 
+# The pipeline diagram's stage for each agent in the trace.
+AGENT_STAGES: dict[str, str] = {
+    "CV Analyst": "cv_analyst",
+    "Comparison": "comparison",
+    "Guardrail Reviewer": "reviewer",
+    "Scoring": "scoring",
+    "Report": "report",
+    "Bias filter": "report",
+}
+STAGE_ORDER: list[str] = ["intake", "cv_analyst", "comparison", "reviewer", "scoring", "report"]
+
+
+def live_pipeline_states(event: TraceEvent | None) -> dict[str, str]:
+    """Stages before the current agent are done, the current one is active (it pulses)."""
+    states = {"approve": "done", "intake": "done"}
+    stage = AGENT_STAGES.get(event.agent) if event else None
+    if stage is None:
+        return states
+    position = STAGE_ORDER.index(stage)
+    for earlier in STAGE_ORDER[1:position]:
+        states[earlier] = "done"
+    states[stage] = "active" if event.status in ("started", "warning") else "done"
+    return states
+
+
+def live_status(run: RunResult, total: int, event: TraceEvent | None) -> tuple[float, str]:
+    """(fraction finished, a line like "CV 3 of 6 · Kevin Ramdin · Comparison")."""
+    finished = sum(1 for e in run.trace if e.agent == "Supervisor" and e.action.startswith("Finished"))
+    finished = min(finished, total)
+    who = event.candidate if event and event.candidate else ""
+    step = event.agent if event else "Starting"
+    current = min(finished + 1, total)
+    return (finished / total if total else 1.0), f"CV {current} of {total} · {who} · {step}".replace(" ·  ·", " ·")
+
+
 def start_screening(settings: Settings, memory: Memory, only_new: bool) -> None:
     requirements = state.approved_requirements()
     run = state.current_run()
@@ -150,12 +190,25 @@ def start_screening(settings: Settings, memory: Memory, only_new: bool) -> None:
 
     documents = state.active_cvs(memory)
     job_id = st.session_state.get("job_id")
-    st.warning("Screening in progress. Please don't click elsewhere until it finishes.")
+    screened_ids = {candidate.candidate_id for candidate in run.candidates if candidate.error is None}
+    total = len([d for d in documents if not only_new or d.content_hash[:12] not in screened_ids]) or 1
+    trace_start = len(run.trace)  # only count this run's "Finished" events
+    st.info("Screening in progress. Please don't click elsewhere until it finishes.", icon="⏳")
+    with st.container(key="card-live"):
+        pipeline_placeholder = st.empty()
+        progress_placeholder = st.empty()
     timeline_placeholder = st.empty()
+    pipeline_placeholder.markdown(components.pipeline_html(live_pipeline_states(None), compact=True), unsafe_allow_html=True)
+    progress_placeholder.progress(0.0, text="Starting…")
     timeline_placeholder.markdown(timeline_html(run.trace), unsafe_allow_html=True)
 
     def on_event(event: TraceEvent) -> None:
-        # Redraw the timeline after every agent step (the live view, FR-S2).
+        # Redraw the pipeline, the progress bar and the timeline after every agent step (FR-S2).
+        pipeline_placeholder.markdown(components.pipeline_html(live_pipeline_states(event), compact=True),
+                                      unsafe_allow_html=True)
+        this_run = run.model_copy(update={"trace": run.trace[trace_start:]})
+        fraction, text = live_status(this_run, total, event)
+        progress_placeholder.progress(fraction, text=text)
         timeline_placeholder.markdown(timeline_html(run.trace), unsafe_allow_html=True)
 
     def save(saved_run: RunResult) -> None:
@@ -245,6 +298,8 @@ def render(settings: Settings, memory: Memory) -> None:
         st.info("No screening yet. Approve the requirements, add CVs, then click **Run screening**.")
         return
 
+    done = {key: "done" for key in ["approve", "intake", "cv_analyst", "comparison", "reviewer", "scoring", "report"]}
+    components.show('<div style="margin-top:10px"></div>' + components.pipeline_html(done, compact=True))
     components.show(
         '<p class="tl-section-title" style="margin-top:14px">Pipeline timeline</p>'
         + components.chip(f"Run {run.run_id}", "neutral") + components.chip(f"{run.provider} · {run.model}", "info")

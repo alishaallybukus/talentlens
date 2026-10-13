@@ -8,7 +8,8 @@ Why this file exists:
   the exact CV quote, whether code verified that quote, and the guideline
   clauses that were cited (FR-R1 to FR-R6).
 
-Layout: summary tiles, then a clickable ranking table (or the comparison matrix),
+Layout: summary tiles, then tabs (a clickable ranking table, a decision board,
+side-by-side comparison, the comparison matrix),
 then the selected candidate's profile with tabs (Summary, Evidence, Flags and
 intake) next to the decision card.
 """
@@ -434,6 +435,153 @@ def show_reset_decisions(memory: Memory, run: RunResult) -> None:
 # ===========================================================================
 
 
+# ===========================================================================
+# Decision board: one column per decision, click to move a card
+# ===========================================================================
+
+BOARD_COLUMNS: list[tuple[str, str, str]] = [  # (decision, heading, accent class)
+    ("Pending", "○ Pending", "neutral"),
+    ("Shortlist", "✓ Shortlist", "met"),
+    ("Hold", "⏸ Hold", "partial"),
+    ("Reject", "✕ Reject", "missing"),
+]
+MOVE_BUTTONS: dict[str, tuple[str, str]] = {  # decision -> (button label, help)
+    "Pending": ("○", "Move back to Pending"),
+    "Shortlist": ("✓", "Shortlist"),
+    "Hold": ("⏸", "Put on hold"),
+    "Reject": ("✕", "Reject (needs a written reason)"),
+}
+
+
+def record_decision(memory: Memory, run: RunResult, candidate: CandidateResult, decision: str, reason: str) -> None:
+    """Save a decision from the board or the reject pop-up. Raises DecisionError if it breaks a rule."""
+    memory.save_decision(run.run_id, candidate.candidate_id, candidate_name(candidate), decision, reason,
+                         state.reviewer_name(), candidate.score.band, candidate.score.overall)
+    # Forget the old values in the decision card, so it shows the new decision.
+    st.session_state.pop(f"decision_{candidate.candidate_id}", None)
+    st.session_state.pop(f"reason_{candidate.candidate_id}", None)
+
+
+@st.dialog("Reject candidate")
+def reject_dialog(memory: Memory, run: RunResult, candidate: CandidateResult, current_reason: str) -> None:
+    """A rejection always needs a written, job-related reason (Hiring Guidelines §8.2)."""
+    st.markdown(f"Reject **{components.safe(candidate_name(candidate))}**? The AI said *{candidate.score.band}* "
+                f"({candidate.score.overall:.0f}).")
+    reason = st.text_area("Job-related reason", value=current_reason, key=f"dialog_reason_{candidate.candidate_id}",
+                          placeholder="At least 10 characters, e.g. No experience with SQL or databases.")
+    if st.button("Confirm rejection", type="primary", width="stretch"):
+        try:
+            record_decision(memory, run, candidate, "Reject", reason)
+        except DecisionError as error:
+            st.error(str(error))
+            return
+        st.toast(f"Decision saved: {candidate_name(candidate)} → Reject")
+        st.rerun()
+
+
+def board_card_html(candidate: CandidateResult) -> str:
+    return (
+        '<div class="tl-board-card">'
+        f'<div class="tl-board-top"><span class="tl-board-name">{components.safe(candidate_name(candidate))}</span>'
+        f'<span class="tl-board-score">{candidate.score.overall:.0f}</span></div>'
+        f"<div>{components.band_pill(candidate.score.band)} {components.flag_icons(candidate.flags)}</div>"
+        "</div>"
+    )
+
+
+def move_candidate(memory: Memory, run: RunResult, candidate: CandidateResult, target: str, saved: dict | None) -> None:
+    reason = saved["reason"] if saved and saved.get("reason") else ""
+    if target == "Reject":
+        reject_dialog(memory, run, candidate, reason)
+        return
+    record_decision(memory, run, candidate, target, reason)
+    st.toast(f"Decision saved: {candidate_name(candidate)} → {target}")
+    st.rerun()
+
+
+def show_board(memory: Memory, run: RunResult, candidates: list[CandidateResult], decisions: dict[str, dict]) -> None:
+    st.caption("Move each candidate with the small buttons on its card. Rejecting asks for a written reason. "
+               "Ⓘ opens the candidate below.")
+    columns = st.columns(len(BOARD_COLUMNS), gap="small")
+    for column, (decision, heading, accent) in zip(columns, BOARD_COLUMNS):
+        members = [candidate for candidate in candidates if decision_for(candidate, decisions) == decision]
+        with column, st.container(key=f"card-board-{decision.lower()}"):
+            components.show(f'<div class="tl-board-head tl-board-{accent}">{heading}'
+                            f'<span class="tl-board-count">{len(members)}</span></div>')
+            if not members:
+                components.show('<div class="tl-board-empty">No candidates</div>')
+            for candidate in members:
+                cid = candidate.candidate_id
+                components.show(board_card_html(candidate))
+                targets = [name for name, _heading, _accent in BOARD_COLUMNS if name != decision]
+                buttons = st.columns(len(targets) + 1, gap="small")
+                for button_column, target in zip(buttons, targets):
+                    label, help_text = MOVE_BUTTONS[target]
+                    if button_column.button(label, key=f"move_{cid}_{target}", help=help_text, width="stretch"):
+                        move_candidate(memory, run, candidate, target, decisions.get(cid))
+                buttons[-1].button("Ⓘ", key=f"open_{cid}", help="Open this candidate below", width="stretch",
+                                   on_click=select_candidate, args=(cid,))
+
+
+# ===========================================================================
+# Compare: two or three candidates side by side
+# ===========================================================================
+
+
+def compare_card_html(candidate: CandidateResult, decision: str) -> str:
+    score = candidate.score
+    missing = [MISSING_INFO_NAMES.get(key, key) for key in candidate.missing_info]
+    missing_html = " ".join(components.chip(f"❓ {item}", "partial") for item in missing) \
+        or components.chip("✔ Nothing missing", "met")
+    strengths = candidate.assessment.strengths[:2] if candidate.assessment else []
+    strengths_html = "".join(f"<li>{components.safe(item)}</li>" for item in strengths)
+    return (
+        '<div class="tl-compare-card">'
+        f'<div class="tl-profile">{components.score_ring(score.overall, size=70)}<div>'
+        f'<div class="tl-board-name">{components.safe(candidate_name(candidate))}</div>'
+        f"<div>{components.band_pill(score.band)}</div><div>{components.decision_chip(decision)}</div></div></div>"
+        f'{components.bar_row("Must-haves", score.must_have_pct)}{components.bar_row("Nice-to-haves", score.nice_to_have_pct)}'
+        f'<div class="tl-brief"><h4 style="margin-top:10px">Missing information</h4></div><div>{missing_html}</div>'
+        f'<div class="tl-brief"><h4 style="margin-top:10px">Strengths</h4></div><ul class="tl-compare-list">{strengths_html}</ul>'
+        "</div>"
+    )
+
+
+def compare_table_html(run: RunResult, chosen: list[CandidateResult]) -> str:
+    headers = ["Requirement"] + [components.safe(candidate_name(candidate)) for candidate in chosen]
+    rows = []
+    for requirement in all_requirements(run):
+        statuses = []
+        row = [f"<strong>{components.safe(requirement.id)}</strong> {components.safe(requirement.label)}"]
+        for candidate in chosen:
+            result = results_by_id(candidate).get(requirement.id)
+            status = result.status if result else "missing"
+            statuses.append(status)
+            quote = components.safe(result.evidence) if result and result.evidence else "No evidence"
+            row.append(f'<span title="{quote}">{components.status_chip(status)}</span>')
+        if len(set(statuses)) > 1:  # highlight where the candidates differ
+            row[0] = f'<span class="tl-differs">◆</span> {row[0]}'
+        rows.append(row)
+    return components.html_table(headers, rows, css_class="tl-table tl-compare-table")
+
+
+def show_compare(run: RunResult, candidates: list[CandidateResult], decisions: dict[str, dict]) -> None:
+    ids = [candidate.candidate_id for candidate in candidates]
+    names = {candidate.candidate_id: candidate_name(candidate) for candidate in candidates}
+    chosen_ids = st.multiselect("Compare up to 3 candidates", ids, default=ids[:2], max_selections=3,
+                                format_func=lambda cid: names[cid], key="compare_ids")
+    chosen = [candidate for candidate in candidates if candidate.candidate_id in chosen_ids]
+    if len(chosen) < 2:
+        st.info("Pick at least two candidates to compare.")
+        return
+    columns = st.columns(len(chosen), gap="medium")
+    for column, candidate in zip(columns, chosen):
+        with column:
+            components.show(compare_card_html(candidate, decision_for(candidate, decisions)))
+    st.caption("◆ marks requirements where they differ. Hover a status to read the CV quote.")
+    components.show(compare_table_html(run, chosen))
+
+
 def show_candidate_switcher(candidates: list[CandidateResult]) -> CandidateResult:
     """‹ previous · candidate picker · next › — quick movement between candidates."""
     ids = [candidate.candidate_id for candidate in candidates]
@@ -471,10 +619,14 @@ def render(settings: Settings, memory: Memory) -> None:
         st.warning(f"{len(failed)} CV(s) couldn't be screened. Retry them in step 3.")
 
     show_summary(candidates, decisions)
-    tabs = st.tabs(["Ranking", "Comparison matrix"])
+    tabs = st.tabs(["Ranking", "Decision board", "Compare", "Comparison matrix"])
     with tabs[0]:
         show_ranking(candidates, decisions)
     with tabs[1]:
+        show_board(memory, run, candidates, decisions)
+    with tabs[2]:
+        show_compare(run, candidates, decisions)
+    with tabs[3]:
         show_matrix(run, candidates)
 
     st.markdown("&nbsp;")

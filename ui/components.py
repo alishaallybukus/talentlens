@@ -44,8 +44,10 @@ def safe(text: object) -> str:
 
 
 def load_styles() -> None:
-    """Add styles.css to the page. Called once at the top of every run of the app."""
-    css = STYLES_PATH.read_text(encoding="utf-8")
+    """Add styles.css (plus the dark-mode colours when dark mode is on). Called at the top of every run."""
+    from ui import theme  # here, not at the top, so tests can import components without Streamlit config
+
+    css = STYLES_PATH.read_text(encoding="utf-8") + theme.css_overrides()
     st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
 
 
@@ -117,10 +119,10 @@ def score_ring(score: float, size: int = 64) -> str:
     filled = max(0.0, min(score, 100.0)) / 100 * circumference
     return (
         f'<svg width="{size}" height="{size}" viewBox="0 0 64 64" role="img" aria-label="Score {score:.1f}">'
-        f'<circle cx="32" cy="32" r="{radius}" fill="none" stroke="#DDE3E6" stroke-width="6"/>'
-        f'<circle cx="32" cy="32" r="{radius}" fill="none" stroke="#0E7C7B" stroke-width="6" '
+        f'<circle cx="32" cy="32" r="{radius}" fill="none" style="stroke:var(--tl-ring-track)" stroke-width="6"/>'
+        f'<circle cx="32" cy="32" r="{radius}" fill="none" style="stroke:var(--tl-primary)" stroke-width="6" '
         f'stroke-dasharray="{filled:.1f} {circumference:.1f}" transform="rotate(-90 32 32)" stroke-linecap="round"/>'
-        f'<text x="32" y="37" text-anchor="middle" font-size="15" font-weight="700" fill="#1B2430">{score:.0f}</text>'
+        f'<text x="32" y="37" text-anchor="middle" font-size="15" font-weight="700" style="fill:var(--tl-text)">{score:.0f}</text>'
         "</svg>"
     )
 
@@ -212,13 +214,13 @@ def logo_html(app_name: str, tagline: str) -> str:
     """The TalentLens logo: a teal lens over a document, with the name and tagline."""
     svg = (
         '<svg width="40" height="40" viewBox="0 0 40 40" role="img" aria-label="TalentLens logo">'
-        '<rect x="4" y="3" width="22" height="28" rx="3" fill="#E6F3F2" stroke="#0A5E5D" stroke-width="2"/>'
-        '<line x1="9" y1="10" x2="21" y2="10" stroke="#0A5E5D" stroke-width="2" stroke-linecap="round"/>'
-        '<line x1="9" y1="15" x2="18" y2="15" stroke="#0A5E5D" stroke-width="2" stroke-linecap="round"/>'
-        '<circle cx="24" cy="23" r="8" fill="#FFFFFF" stroke="#0E7C7B" stroke-width="3"/>'
-        '<path d="M20.5 23.2l2.4 2.4 4.6-4.8" fill="none" stroke="#1E7F4F" stroke-width="2.2" '
+        '<rect x="4" y="3" width="22" height="28" rx="3" style="fill:var(--tl-primary-tint);stroke:var(--tl-primary-dark)" stroke-width="2"/>'
+        '<line x1="9" y1="10" x2="21" y2="10" style="stroke:var(--tl-primary-dark)" stroke-width="2" stroke-linecap="round"/>'
+        '<line x1="9" y1="15" x2="18" y2="15" style="stroke:var(--tl-primary-dark)" stroke-width="2" stroke-linecap="round"/>'
+        '<circle cx="24" cy="23" r="8" style="fill:var(--tl-surface);stroke:var(--tl-primary)" stroke-width="3"/>'
+        '<path d="M20.5 23.2l2.4 2.4 4.6-4.8" fill="none" style="stroke:var(--tl-met)" stroke-width="2.2" '
         'stroke-linecap="round" stroke-linejoin="round"/>'
-        '<line x1="30" y1="29" x2="36" y2="35" stroke="#0E7C7B" stroke-width="3.5" stroke-linecap="round"/>'
+        '<line x1="30" y1="29" x2="36" y2="35" style="stroke:var(--tl-primary)" stroke-width="3.5" stroke-linecap="round"/>'
         "</svg>"
     )
     return (
@@ -268,3 +270,53 @@ def status_dot(status: str) -> str:
     """A compact round status marker for the comparison matrix: symbol plus colour."""
     symbol, word = STATUS_SYMBOLS.get(status, ("?", status))
     return f'<span class="tl-dot tl-{safe(status)}" title="{word}">{symbol}</span>'
+
+
+# --- Agent pipeline diagram (Home and Screening) -------------------------------------------
+
+# (key, icon, name, kind, what it does). kind: ai, code or human.
+PIPELINE_STAGES: list[tuple[str, str, str, str, str]] = [
+    ("approve", "👤", "Approve requirements", "human", "Checkpoint 1"),
+    ("intake", "📄", "Intake", "code", "Redact · quarantine"),
+    ("cv_analyst", "🔎", "CV Analyst", "ai", "Extract facts"),
+    ("comparison", "⚖", "Comparison", "ai", "Quotes + guideline §"),
+    ("reviewer", "🛡", "Reviewer", "code", "Verify quotes"),
+    ("scoring", "🧮", "Scoring", "code", "70 / 30 rubric"),
+    ("report", "✍", "Report", "ai", "Brief + bias filter"),
+    ("decide", "👤", "Your decision", "human", "Checkpoints 2 and 3"),
+]
+KIND_LABELS: dict[str, str] = {"ai": "AI agent", "code": "Code", "human": "Human"}
+
+
+def pipeline_html(states: dict[str, str] | None = None, compact: bool = False) -> str:
+    """The screening pipeline as connected stages. states: stage key -> idle, active or done.
+
+    Between Comparison and Reviewer a ⇄ marks the revise loop (quotes not found → one retry).
+    """
+    states = states or {}
+    parts = []
+    for position, (key, icon, name, kind, detail) in enumerate(PIPELINE_STAGES):
+        status = states.get(key, "idle")
+        badge = '<span class="tl-stage-check">✓</span>' if status == "done" else ""
+        sub = "" if compact else f'<div class="tl-stage-detail">{safe(detail)}</div>'
+        parts.append(
+            f'<div class="tl-stage tl-kind-{kind} tl-is-{status}" title="{safe(KIND_LABELS[kind])}: {safe(detail)}">'
+            f'<div class="tl-stage-icon">{icon}{badge}</div>'
+            f'<div class="tl-stage-name">{safe(name)}</div>'
+            f'<div class="tl-stage-kind">{KIND_LABELS[kind]}</div>{sub}</div>'
+        )
+        if position < len(PIPELINE_STAGES) - 1:
+            arrow = "⇄" if key == "comparison" else "→"
+            parts.append(f'<div class="tl-stage-arrow" title="{"Revise loop: one retry" if arrow == "⇄" else ""}">{arrow}</div>')
+    return f'<div class="tl-pipe{" tl-pipe-compact" if compact else ""}">{"".join(parts)}</div>'
+
+
+def pipeline_legend() -> str:
+    return (
+        '<div class="tl-pipe-legend">'
+        '<span><i class="tl-dot-kind tl-kind-ai"></i>AI agent (Gemini or Ollama)</span>'
+        '<span><i class="tl-dot-kind tl-kind-code"></i>Code: rules that can\'t be talked round</span>'
+        '<span><i class="tl-dot-kind tl-kind-human"></i>Human checkpoint</span>'
+        '<span>📚 Guideline clauses are retrieved (RAG) for the Job Analyst, Comparison and Report agents</span>'
+        "</div>"
+    )

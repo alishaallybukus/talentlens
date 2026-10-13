@@ -38,9 +38,13 @@ def show_job_description_input() -> None:
         key="jd_source_choice",
     )
     if source == "Sample job":
-        if st.button("Load the sample job (Marketing Executive)"):
+        columns = st.columns(2)
+        if columns[0].button("Load the sample job (Marketing Executive)", width="stretch"):
             st.session_state["jd_text"] = state.SAMPLE_JOB_FILE.read_text(encoding="utf-8")
             st.session_state["jd_source"] = "Sample job"
+        if columns[1].button("Load the test pack job (Junior Software Developer)", width="stretch"):
+            st.session_state["jd_text"] = state.TEST_PACK_JOB_FILE.read_text(encoding="utf-8")
+            st.session_state["jd_source"] = "Test pack job"
     elif source == "Upload a file":
         upload = st.file_uploader("Job description (.md, .txt, .pdf, .docx)", type=["md", "txt", "pdf", "docx"])
         if upload is not None and st.button("Use this file"):

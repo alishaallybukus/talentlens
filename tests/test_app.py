@@ -31,12 +31,14 @@ def go_to(test_app: AppTest, page_key: str) -> None:
     test_app.button(key=f"nav_{page_key}").click().run()
 
 
-def test_app_starts_on_job_setup(app) -> None:
+def test_app_starts_on_home(app) -> None:
     assert no_errors(app)
-    assert app.header[0].value == "Job setup"
+    assert "AI does the reading." in all_text(app)
+    go_to(app, "home")
+    assert no_errors(app)
 
 
-@pytest.mark.parametrize("page_key", ["candidates", "screening", "review", "report", "behind"])
+@pytest.mark.parametrize("page_key", ["job_setup", "candidates", "screening", "review", "report", "behind", "ask"])
 def test_every_page_opens_without_errors(app, page_key) -> None:
     go_to(app, page_key)
     assert no_errors(app)
@@ -78,6 +80,7 @@ def test_full_phase_3_flow_with_fake_model(tmp_path, monkeypatch) -> None:
 
     app = AppTest.from_file(APP_FILE, default_timeout=APP_TIMEOUT)
     app.run()
+    go_to(app, "job_setup")
     click(app, "Load the sample job (Marketing Executive)")
     click(app, "Extract requirements")
     assert no_errors(app)
@@ -99,6 +102,7 @@ def test_full_phase_3_flow_with_fake_model(tmp_path, monkeypatch) -> None:
     # FR-M2: a brand-new session (like restarting the app) reloads everything.
     restarted = AppTest.from_file(APP_FILE, default_timeout=APP_TIMEOUT)
     restarted.run()
+    go_to(restarted, "job_setup")
     assert "Approved by Recruiter" in all_text(restarted)
     assert len(restarted.session_state["run"].candidates) == 6
 
@@ -120,6 +124,7 @@ def screened_app(tmp_path, monkeypatch) -> AppTest:
     monkeypatch.setattr("ui.state.make_llm", lambda settings, memory: FakeLLM())
     test_app = AppTest.from_file(APP_FILE, default_timeout=APP_TIMEOUT)
     test_app.run()
+    go_to(test_app, "job_setup")
     click(test_app, "Load the sample job (Marketing Executive)")
     click(test_app, "Extract requirements")
     click(test_app, "Approve requirements")
@@ -233,7 +238,7 @@ def test_access_code_is_required_when_set(tmp_path, monkeypatch) -> None:
     app.text_input(key="access_code_input").input("demo-code").run()
     click(app, "Enter")
     assert no_errors(app)
-    assert app.header[0].value == "Job setup"
+    assert "AI does the reading." in all_text(app)  # the Home page
 
 
 def test_deployed_app_hides_ollama(tmp_path, monkeypatch) -> None:
@@ -262,3 +267,42 @@ def test_extras_work_in_the_app(tmp_path, monkeypatch) -> None:
     click(app, "Who has TikTok experience?")
     assert no_errors(app)
     assert "Quote verified" in all_text(app)
+
+
+def test_decision_board_moves_a_candidate(tmp_path, monkeypatch) -> None:
+    """Clicking ✓ on a board card records a real decision (the same rules as the decision card)."""
+    from core.memory import Memory
+
+    app = screened_app(tmp_path, monkeypatch)
+    go_to(app, "review")
+    cid = candidate_id(app, "Sarah")
+    app.button(key=f"move_{cid}_Shortlist").click().run()
+    assert no_errors(app)
+    memory = Memory("sqlite:///" + (tmp_path / "review.db").as_posix())
+    decisions = memory.get_decisions(app.session_state["run"].run_id)
+    assert decisions[cid]["decision"] == "Shortlist"
+    memory.close()
+
+
+def test_theme_switch_goes_dark_and_back(app) -> None:
+    from ui import theme
+
+    try:
+        app.button(key="theme_toggle").click().run()
+        assert no_errors(app)
+        assert theme.is_dark()
+        assert "--tl-surface: #151C20" in theme.css_overrides()
+        app.button(key="theme_toggle").click().run()
+        assert not theme.is_dark()
+        assert theme.css_overrides() == ""
+    finally:
+        theme.apply(False)  # the theme is app-wide: never leave other tests in dark mode
+
+
+def test_home_shows_the_pipeline_and_next_step(tmp_path, monkeypatch) -> None:
+    app = screened_app(tmp_path, monkeypatch)
+    go_to(app, "home")
+    assert no_errors(app)
+    text = all_text(app)
+    assert "How each CV is screened" in text and "Comparison" in text
+    assert any(button.label.startswith("Continue: Review") for button in app.button)

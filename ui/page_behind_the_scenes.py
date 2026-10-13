@@ -20,7 +20,7 @@ from core import prompts
 from core.config import PROJECT_ROOT, Settings
 from core.memory import Memory
 from core.schemas import RunResult
-from ui import components, state
+from ui import charts, components, state, theme
 
 EVAL_RESULTS_DIR: Path = PROJECT_ROOT / "eval" / "results"
 
@@ -84,19 +84,23 @@ def agent_summary(run: RunResult) -> pd.DataFrame:
 
 
 def tokens_chart(table: pd.DataFrame) -> alt.LayerChart:
-    """Horizontal bars: total tokens per agent. One measure, one hue (the brand teal), labelled ends."""
+    """Horizontal bars: total tokens per agent. One measure, one hue, labelled ends, hover tooltip."""
+    colors = theme.chart_colors()
     data = table.assign(Tokens=table["Tokens in"] + table["Tokens out"])
     base = alt.Chart(data).encode(
-        y=alt.Y("Agent:N", sort="-x", title=None, axis=alt.Axis(labelFontSize=13, labelColor="#1B2430", ticks=False, domain=False)),
-        x=alt.X("Tokens:Q", title=None, axis=alt.Axis(grid=True, gridColor="#EEF1F3", labelColor="#4A5563",
+        y=alt.Y("Agent:N", sort="-x", title=None,
+                axis=alt.Axis(labelFontSize=13, labelColor=colors["text"], ticks=False, domain=False)),
+        x=alt.X("Tokens:Q", title=None, axis=alt.Axis(grid=True, gridColor=colors["grid"], labelColor=colors["muted"],
                                                        tickCount=4, domain=False, ticks=False, format="~s")),
     )
-    bars = base.mark_bar(color="#0E7C7B", cornerRadiusEnd=4, height=18).encode(
+    bars = base.mark_bar(color=colors["bar"], cornerRadiusEnd=4, height=18).encode(
         tooltip=[alt.Tooltip("Agent:N"), alt.Tooltip("Calls:Q"), alt.Tooltip("Tokens in:Q", format=","),
                  alt.Tooltip("Tokens out:Q", format=","), alt.Tooltip("Tokens:Q", title="Total tokens", format=",")]
     )
-    labels = base.mark_text(align="left", dx=6, color="#4A5563", fontSize=12).encode(text=alt.Text("Tokens:Q", format=","))
-    return (bars + labels).properties(height=46 * len(data) + 10).configure_view(stroke=None)
+    labels = base.mark_text(align="left", dx=6, color=colors["muted"], fontSize=12).encode(
+        text=alt.Text("Tokens:Q", format=",")
+    )
+    return (bars + labels).properties(height=46 * len(data) + 10).configure_view(stroke=None).configure(background="transparent")
 
 
 def show_agent_summary(run: RunResult) -> None:
@@ -149,20 +153,60 @@ def latest_results_by_provider() -> dict[str, dict]:
     return latest
 
 
+SHORT_BANDS: dict[str, str] = {"Strong match": "Strong", "Possible match": "Possible", "Not a match for this role": "Not a match"}
+
+
+def results_by_cv_html(results: dict[str, dict]) -> str:
+    """One row per CV, one column per model: ✔ pass or ✖ with the reason on hover."""
+    providers = list(results)
+    cvs: dict[str, dict[str, dict]] = {}
+    for provider in providers:
+        for case in results[provider].get("cases", []):
+            cvs.setdefault(case.get("name") or case.get("cv", "?"), {})[provider] = case
+    headers = ["CV"] + [components.safe(provider.title()) for provider in providers]
+    rows = []
+    for name, by_provider in cvs.items():
+        row = [f"<strong>{components.safe(name)}</strong>"]
+        for provider in providers:
+            case = by_provider.get(provider)
+            if case is None:
+                row.append('<span class="tl-muted">not run</span>')
+            elif case.get("passed"):
+                band = case.get("band", "")
+                row.append(f'<span title="{components.safe(band)}">{components.chip("✔ " + SHORT_BANDS.get(band, band), "met")}</span>')
+            else:
+                row.append(f'<span title="{components.safe(case.get("problems", ""))}">'
+                           f'{components.chip("✖ failed", "missing")}</span>')
+        rows.append(row)
+    return components.html_table(headers, rows)
+
+
 def show_evaluation() -> None:
     results = latest_results_by_provider()
     if not results:
-        st.info("No evaluation results yet. Run `python -m eval.run_eval --provider gemini` to create them.")
+        st.info("No evaluation results yet. Run `python -m eval.run_eval --provider ollama` to create them.")
         return
+    st.caption("The real pipeline on the 7 fictional demo CVs, compared with the expected results in "
+               "data/sample/ground_truth.json (band, missing information, flags).")
+    tiles = []
     for provider, data in results.items():
-        st.markdown(f"#### {provider.title()} · {data.get('model', '')}")
-        st.caption(f"From {data['file']}")
         summary = data.get("summary", {})
-        if summary:
-            components.show_tiles([(name.replace("_", " ").capitalize(), value) for name, value in summary.items()])
-        cases = data.get("cases", [])
-        if cases:
-            st.dataframe(pd.DataFrame(cases), hide_index=True, width="stretch")
+        tiles.append((f"{provider.title()}: CVs correct", summary.get("passed", "-"), "primary"))
+        tiles.append((f"{provider.title()}: tokens per CV", f"{summary.get('avg_tokens_per_cv', 0):,}", ""))
+    components.show_kpis(tiles)
+    columns = st.columns([1.3, 1], gap="large")
+    with columns[0], st.container(key="card-eval-chart"):
+        components.show('<p class="tl-section-title">Accuracy by model</p>')
+        st.altair_chart(charts.evaluation_chart(results), width="stretch")
+        st.caption("Percentages from the latest evaluation of each model. Hover a bar for the exact value.")
+    with columns[1], st.container(key="card-eval-cvs"):
+        components.show('<p class="tl-section-title">Results by CV</p>')
+        components.show(results_by_cv_html(results))
+    for provider, data in results.items():
+        with st.expander(f"All details: {provider.title()} · {data.get('model', '')} ({data['file']})"):
+            cases = data.get("cases", [])
+            if cases:
+                st.dataframe(pd.DataFrame(cases), hide_index=True, width="stretch")
 
 
 # ===========================================================================

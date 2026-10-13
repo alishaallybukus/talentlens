@@ -27,6 +27,9 @@ SAMPLE_DIR: Path = PROJECT_ROOT / "data" / "sample"
 SAMPLE_JOB_FILE = SAMPLE_DIR / "job_description.md"
 SAMPLE_GUIDELINES_FILE = SAMPLE_DIR / "hiring_guidelines.md"
 SAMPLE_CV_DIR = SAMPLE_DIR / "cvs"
+TEST_PACK_DIR = SAMPLE_DIR / "test_pack"  # a second sample: Junior Software Developer
+TEST_PACK_JOB_FILE = TEST_PACK_DIR / "job_description.md"
+TEST_PACK_CV_DIR = TEST_PACK_DIR / "cvs"
 
 GEMINI_MODEL_CHOICES = ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash"]
 
@@ -51,7 +54,7 @@ def get_index(guidelines_text: str) -> GuidelineIndex:
 def init_session(settings: Settings, memory: Memory) -> None:
     """Fill session state with defaults, then reload the working area once per browser session."""
     defaults = {
-        "page": "job_setup",
+        "page": "home",
         "reviewer": settings.reviewer_name,
         "provider": settings.llm_provider if not settings.deployed else "gemini",
         "gemini_model": settings.gemini_model,

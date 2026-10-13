@@ -93,6 +93,14 @@ INJECTION_PATTERNS: list[str] = [
     r"\brank\s+(this|the|him|her|them|me|my)\b.{0,40}\b(first|top|highest|#1|number\s+one)\b",
     r"\bmeets\s+(every|all)\s+(the\s+)?requirements?\b",
     r"<\|[^|>]*\|>|\[/?INST\]|<</?SYS>>",  # special tokens such as <|system|>
+    # Added after the test pack's "Alex Morgan" CV (9 Oct 2026), whose attack used other wording:
+    r"\bsystem\s+override\b",
+    r"\bignore\s+(the\s+|all\s+|any\s+|your\s+)?(job\s+description|criteria|requirements|other\s+candidates|guidelines)\b",
+    r"\bif\s+you\s+are\s+an?\s+(ai|a\.i\.|llm|language\s+model|assistant|chatbot|bot)\b",
+    r"\bfollow\s+these\s+instructions\b",
+    r"\binstructions?\s+(for|to)\s+(the\s+|any\s+)?(automated|ai|a\.i\.|cv|resume)\s+(cv\s+)?(reviewer|screener|screening|system|tool)",
+    r"\bdo\s+not\s+mention\s+this\s+instruction",
+    r"\bgive\s+this\s+(cv|candidate|resume|application)\b.{0,30}\b\d{2,3}\s*(/\s*100|%|out\s+of)",
 ]
 
 INJECTION_FLAG_MESSAGE = (
@@ -109,18 +117,42 @@ def looks_like_injection(line: str) -> bool:
     return False
 
 
+SENTENCE_END = (".", "!", "?", ":")
+
+
+WRAPPED_LINE_LENGTH = 60  # a PDF line this long that stops mid-sentence was probably wrapped
+
+
+def continues_sentence(previous: str, line: str) -> bool:
+    """True if `line` carries on the sentence of `previous` (a PDF often wraps one sentence over lines).
+
+    Either the line starts in lowercase, or the previous line is long and stops without a full stop.
+    A short heading-like line ("SYSTEM PROMPT: ...") never pulls in the next line.
+    """
+    stripped = line.strip()
+    if not stripped:
+        return False  # a blank line ends the paragraph
+    if stripped[0].islower():
+        return True
+    previous = previous.rstrip()
+    return len(previous) >= WRAPPED_LINE_LENGTH and not previous.endswith(SENTENCE_END)
+
+
 def quarantine_injections(text: str) -> tuple[str, list[str]]:
-    """Remove lines that look like instructions to the AI.
+    """Remove lines that look like instructions to the AI, plus the wrapped lines of the same sentence.
 
     Returns the cleaned text and the removed lines (to show the recruiter).
     """
     kept_lines: list[str] = []
     quarantined: list[str] = []
+    previous_removed: str | None = None  # the last line we removed, if the line before this one was removed
     for line in text.split("\n"):
-        if looks_like_injection(line):
+        if looks_like_injection(line) or (previous_removed is not None and continues_sentence(previous_removed, line)):
             quarantined.append(line.strip())
+            previous_removed = line
         else:
             kept_lines.append(line)
+            previous_removed = None
     return "\n".join(kept_lines), quarantined
 
 
